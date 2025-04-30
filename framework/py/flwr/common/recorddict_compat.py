@@ -193,6 +193,7 @@ def _extract_status_from_recorddict(res_str: str, recorddict: RecordDict) -> Sta
 
 def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
     """Derive FitIns from a RecordDict object."""
+    print("Client deserializza - recorddict_to_fitins")
     parameters, config = _recorddict_to_fit_or_evaluate_ins_components(
         recorddict,
         ins_str="fitins",
@@ -204,11 +205,13 @@ def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
 
 def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitIns object."""
+    print("Server serializza - fitins_to_recorddict")
     return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
 
 
 def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     """Derive FitRes from a RecordDict object."""
+    print("Server deserializza - recorddict_to_fitres")
     ins_str = "fitres"
     parameters = arrayrecord_to_parameters(
         recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input
@@ -229,6 +232,7 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
 
 def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitRes object."""
+    print("Client serializza: fitres_to_recorddict")
     recorddict = RecordDict()
 
     res_str = "fitres"
