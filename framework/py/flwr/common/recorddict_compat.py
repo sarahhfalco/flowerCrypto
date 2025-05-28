@@ -49,7 +49,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
         array = record[key]
 
         if key != EMPTY_TENSOR_KEY:
-            # 🔐 Decifra il tensore
+
             decrypted_tensor = decrypt_and_verify(array.data)
             parameters.tensors.append(decrypted_tensor)
 
@@ -72,7 +72,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     for idx in range(num_arrays):
         tensor = parameters.tensors[idx] if keep_input else parameters.tensors.pop(0)
 
-        # 🔐 Cifra il tensore
+
         encrypted_tensor = encrypt_and_mac(tensor)
 
         ordered_dict[str(idx)] = Array(
