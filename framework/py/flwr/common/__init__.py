@@ -66,8 +66,7 @@ from .typing import ReconnectIns as ReconnectIns
 from .typing import Scalar as Scalar
 from .typing import ServerMessage as ServerMessage
 from .typing import Status as Status
-from .cripto_utils import encrypt_tensor as encrypt_tensor
-from .cripto_utils import decrypt_tensor as decrypt_tensor
+
 
 __all__ = [
     "Array",
@@ -120,7 +119,5 @@ __all__ = [
     "ndarray_to_bytes",
     "ndarrays_to_parameters",
     "now",
-    "parameters_to_ndarrays",
-    "encrypt_tensor",
-    "decrypt_tensor"
+    "parameters_to_ndarrays"
 ]
