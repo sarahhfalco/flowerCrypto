@@ -19,7 +19,8 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Union, cast, get_args
 
-from . import Array, ArrayRecord, ConfigRecord, MetricRecord, RecordDict
+from . import Array, ArrayRecord, ConfigRecord, MetricRecord, RecordDict, encrypt_tensor, decrypt_tensor
+from .cripto_utils import decrypt_and_verify, encrypt_and_mac
 from .typing import (
     Code,
     ConfigRecordValues,
@@ -38,41 +39,22 @@ from .typing import (
 )
 
 EMPTY_TENSOR_KEY = "_empty"
-ciao
+
 
 def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Parameters:
-    """Convert ParameterRecord to legacy Parameters.
-
-    Warnings
-    --------
-    Because `Array`s in `ArrayRecord` encode more information of the
-    array-like or tensor-like data (e.g their datatype, shape) than `Parameters` it
-    might not be possible to reconstruct such data structures from `Parameters` objects
-    alone. Additional information or metadata must be provided from elsewhere.
-
-    Parameters
-    ----------
-    record : ArrayRecord
-        The record to be conveted into Parameters.
-    keep_input : bool
-        A boolean indicating whether entries in the record should be deleted from the
-        input dictionary immediately after adding them to the record.
-
-    Returns
-    -------
-    parameters : Parameters
-        The parameters in the legacy format Parameters.
-    """
+    """Convert an ArrayRecord to legacy Parameters, decrypting tensors."""
     parameters = Parameters(tensors=[], tensor_type="")
 
     for key in list(record.keys()):
+        array = record[key]
+
         if key != EMPTY_TENSOR_KEY:
-            parameters.tensors.append(record[key].data)
+
+            decrypted_tensor = decrypt_and_verify(array.data)
+            parameters.tensors.append(decrypted_tensor)
 
         if not parameters.tensor_type:
-            # Setting from first array in record. Recall the warning in the docstrings
-            # of this function.
-            parameters.tensor_type = record[key].stype
+            parameters.tensor_type = array.stype
 
         if not keep_input:
             del record[key]
@@ -80,45 +62,30 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     return parameters
 
 
+
 def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> ArrayRecord:
-    """Convert legacy Parameters into a single ArrayRecord.
-
-    Because there is no concept of names in the legacy Parameters, arbitrary keys will
-    be used when constructing the ArrayRecord. Similarly, the shape and data type
-    won't be recorded in the Array objects.
-
-    Parameters
-    ----------
-    parameters : Parameters
-        Parameters object to be represented as a ArrayRecord.
-    keep_input : bool
-        A boolean indicating whether parameters should be deleted from the input
-        Parameters object (i.e. a list of serialized NumPy arrays) immediately after
-        adding them to the record.
-
-    Returns
-    -------
-    ArrayRecord
-        The ArrayRecord containing the provided parameters.
-    """
+    """Convert legacy Parameters into a single ArrayRecord with encryption."""
     tensor_type = parameters.tensor_type
-
     num_arrays = len(parameters.tensors)
     ordered_dict = OrderedDict()
+
     for idx in range(num_arrays):
-        if keep_input:
-            tensor = parameters.tensors[idx]
-        else:
-            tensor = parameters.tensors.pop(0)
+        tensor = parameters.tensors[idx] if keep_input else parameters.tensors.pop(0)
+
+
+        encrypted_tensor = encrypt_and_mac(tensor)
+
         ordered_dict[str(idx)] = Array(
-            data=tensor, dtype="", stype=tensor_type, shape=[]
+            data=encrypted_tensor, dtype="", stype=tensor_type, shape=[]
         )
 
     if num_arrays == 0:
         ordered_dict[EMPTY_TENSOR_KEY] = Array(
             data=b"", dtype="", stype=tensor_type, shape=[]
         )
+
     return ArrayRecord(ordered_dict, keep_input=keep_input)
+
 
 
 def _check_mapping_from_recordscalartype_to_scalar(
@@ -193,6 +160,7 @@ def _extract_status_from_recorddict(res_str: str, recorddict: RecordDict) -> Sta
 
 def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
     """Derive FitIns from a RecordDict object."""
+    print("Client deserializza - recorddict_to_fitins")
     parameters, config = _recorddict_to_fit_or_evaluate_ins_components(
         recorddict,
         ins_str="fitins",
@@ -204,11 +172,13 @@ def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
 
 def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitIns object."""
+    print("Server serializza - fitins_to_recorddict")
     return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
 
 
 def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     """Derive FitRes from a RecordDict object."""
+    print("Server deserializza - recorddict_to_fitres")
     ins_str = "fitres"
     parameters = arrayrecord_to_parameters(
         recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input
@@ -229,6 +199,7 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
 
 def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitRes object."""
+    print("Client serializza: fitres_to_recorddict")
     recorddict = RecordDict()
 
     res_str = "fitres"
