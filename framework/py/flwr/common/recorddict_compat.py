@@ -18,6 +18,11 @@
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Union, cast, get_args
+from flwr.common.encryption.crypto_backend import encrypt, decrypt
+from flwr.common.encryption.config import ENCRYPTION_ENABLED, ENCRYPTION_METHOD
+
+
+
 
 from . import Array, ArrayRecord, ConfigRecord, MetricRecord, RecordDict
 from .typing import (
@@ -66,20 +71,26 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     parameters = Parameters(tensors=[], tensor_type="")
 
     for key in list(record.keys()):
+        if key == EMPTY_TENSOR_KEY:
+            continue
+
         array = record[key]
+        tensor = array.data
 
-        if key != EMPTY_TENSOR_KEY:
-            parameters.tensors.append(record[key].data)
+        if ENCRYPTION_ENABLED:
+            tensor = decrypt(tensor, ENCRYPTION_METHOD)
+            print(ENCRYPTION_METHOD)
 
-        if not parameters.tensor_type:
-            # Setting from first array in record. Recall the warning in the docstrings
-            # of this function.
-            parameters.tensor_type = record[key].stype
+        parameters.tensors.append(tensor)
 
         if not keep_input:
             del record[key]
 
+        if not parameters.tensor_type:
+            parameters.tensor_type = array.stype
+
     return parameters
+
 
 
 def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> ArrayRecord:
@@ -104,7 +115,6 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         The ArrayRecord containing the provided parameters.
     """
     tensor_type = parameters.tensor_type
-
     num_arrays = len(parameters.tensors)
     ordered_dict = OrderedDict()
 
@@ -113,6 +123,10 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             tensor = parameters.tensors[idx]
         else:
             tensor = parameters.tensors.pop(0)
+
+        if ENCRYPTION_ENABLED:
+            tensor = encrypt(tensor, ENCRYPTION_METHOD)
+
         ordered_dict[str(idx)] = Array(
             data=tensor, dtype="", stype=tensor_type, shape=[]
         )
@@ -121,6 +135,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         ordered_dict[EMPTY_TENSOR_KEY] = Array(
             data=b"", dtype="", stype=tensor_type, shape=[]
         )
+
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
 

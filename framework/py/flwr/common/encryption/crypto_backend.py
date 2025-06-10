@@ -1,6 +1,7 @@
 # encryption/crypto_backend.py
 
-from .schemes import aes_gcm, cbc_hmac, rsa_scheme, ecc_scheme, aes_ctr, hmac_only
+from .schemes import aes_gcm, cbc_hmac, rsa_scheme, ecc_scheme, aes_ctr, hmac_only, chacha_poly  # <-- nuovo
+
 
 def encrypt(data: bytes, method: str) -> bytes:
     if method == "aes_gcm":
@@ -13,6 +14,8 @@ def encrypt(data: bytes, method: str) -> bytes:
         return aes_ctr.encrypt(data)
     elif method == "hmac":
         return hmac_only.add_hmac(data)
+    elif method == "chacha_poly":
+        return chacha_poly.encrypt(data)
     else:
         raise ValueError(f"Unknown encryption method: {method}")
 
@@ -27,5 +30,7 @@ def decrypt(data: bytes, method: str) -> bytes:
         return aes_ctr.decrypt(data)
     elif method == "hmac":
         return hmac_only.check_hmac(data)
+    elif method == "chacha_poly":
+        return chacha_poly.decrypt(data)
     else:
         raise ValueError(f"Unknown decryption method: {method}")
