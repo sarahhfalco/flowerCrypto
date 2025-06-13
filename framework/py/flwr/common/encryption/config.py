@@ -8,3 +8,5 @@ ENCRYPTION_METHOD = "aes_gcm"
 # "rsa":
 # "aes_ctr":
 # "hmac":
+# "chacha_poly":
+# "xchacha_poly":
