@@ -1,11 +1,13 @@
-"""pytorchexample: A Flower / PyTorch app."""
+"""pytorchexample: A Flower / PyTorch app with Differential Privacy (Opacus)"""
 
 import torch
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
+from opacus import PrivacyEngine
 
 from pytorchexample.task import Net, get_weights, load_data, set_weights, test, train
 
+USE_DP = True
 
 # Define Flower Client
 class FlowerClient(NumPyClient):
@@ -20,6 +22,26 @@ class FlowerClient(NumPyClient):
     def fit(self, parameters, config):
         """Train the model with data of this client."""
         set_weights(self.net, parameters)
+        self.net.to(self.device)
+
+        # Crea optimizer
+        optimizer = torch.optim.SGD(self.net.parameters(), lr=self.lr)
+
+        # Applica Opacus se richiesto
+        if USE_DP:
+            print("[DP] Differential Privacy ATTIVATA")
+            privacy_engine = PrivacyEngine()
+            self.net, optimizer, self.trainloader = privacy_engine.make_private(
+                module=self.net,
+                optimizer=optimizer,
+                data_loader=self.trainloader,
+                noise_multiplier=1.0,  # più alto = più privacy = meno accuratezza
+                max_grad_norm=1.0,
+            )
+        else:
+            print("[DP] Differential Privacy DISATTIVATA")
+
+        # Esegui il training (supporta optimizer esterno)
         results = train(
             self.net,
             self.trainloader,
@@ -27,6 +49,7 @@ class FlowerClient(NumPyClient):
             self.local_epochs,
             self.lr,
             self.device,
+            optimizer=optimizer,
         )
         return get_weights(self.net), len(self.trainloader.dataset), results
 
