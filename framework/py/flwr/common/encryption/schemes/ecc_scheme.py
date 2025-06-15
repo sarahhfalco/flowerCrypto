@@ -1,35 +1,26 @@
-# Reimport necessary packages after environment reset
+from ecies import encrypt, decrypt
 import os
-import time
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.asymmetric import  ec
-from cryptography.hazmat.primitives import  hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-import os
-def generate_ecc_key_pair():
-    private_key = ec.generate_private_key(ec.SECP256R1())
-    public_key = private_key.public_key()
-    return private_key, public_key
+# Path alla directory `encryption/`
+base_dir = os.path.dirname(os.path.dirname(__file__))  # flwr/common/encryption/
+key_dir = os.path.join(base_dir, "keys")
 
-def derive_shared_aes_key(private_key, peer_public_key) -> bytes:
-    shared_key = private_key.exchange(ec.ECDH(), peer_public_key)
-    derived_key = HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=None,
-        info=b"handshake data",
-    ).derive(shared_key)
-    return derived_key
+# Path completi alle chiavi
+private_key_path = os.path.join(key_dir, "private_key.hex")
+public_key_path = os.path.join(key_dir, "public_key.hex")
 
-def encrypt_ecc_aes_gcm(data: bytes, aes_key: bytes) -> bytes:
-    aesgcm = AESGCM(aes_key)
-    nonce = os.urandom(12)
-    ciphertext = aesgcm.encrypt(nonce, data, None)
-    return nonce + ciphertext
+# Carica chiavi da file
+def load_key(path: str) -> str:
+    with open(path, "r") as f:
+        return f.read().strip()
 
-def decrypt_ecc_aes_gcm(encrypted_data: bytes, aes_key: bytes) -> bytes:
-    nonce = encrypted_data[:12]
-    ciphertext = encrypted_data[12:]
-    aesgcm = AESGCM(aes_key)
-    return aesgcm.decrypt(nonce, ciphertext, None)
+# Chiavi caricate
+PRIVATE_KEY_HEX = load_key(private_key_path)
+PUBLIC_KEY_HEX = load_key(public_key_path)
+
+# Cifratura/decifratura
+def ecc_encrypt(data: bytes) -> bytes:
+    return encrypt(PUBLIC_KEY_HEX, data)
+
+def ecc_decrypt(data: bytes) -> bytes:
+    return decrypt(PRIVATE_KEY_HEX, data)

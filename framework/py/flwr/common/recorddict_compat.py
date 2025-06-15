@@ -13,11 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 """RecordDict utilities."""
-
-
+import array
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Union, cast, get_args
+
+import numpy as np
+
 from flwr.common.encryption.crypto_backend import encrypt, decrypt
 from flwr.common.encryption.config import ENCRYPTION_ENABLED, ENCRYPTION_METHOD
 
@@ -43,6 +45,26 @@ from .typing import (
 )
 
 EMPTY_TENSOR_KEY = "_empty"
+
+# Timer cumulativi globali per ogni round
+ROUND_ENCRYPT_TIME = 0.0
+ROUND_DECRYPT_TIME = 0.0
+TOTAL_ENCRYPT_TIME = 0.0
+TOTAL_DECRYPT_TIME = 0.0
+import csv
+import os
+from flwr.common.encryption.config import ENCRYPTION_METHOD
+
+CSV_PATH = "timings.csv"
+
+# Inizializza CSV se non esiste
+if not os.path.exists(CSV_PATH):
+    with open(CSV_PATH, mode="w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["encryption_scheme", "encrypt_time", "decrypt_time"])
+
+# Stampa header allineato (senza ROUND)
+print(f"{'SCHEMA':<12}{'ENCRYPT (s)':<14}{'DECRYPT (s)'}")
 
 
 def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Parameters:
@@ -78,8 +100,13 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
         tensor = array.data
 
         if ENCRYPTION_ENABLED:
+            import time
+            global ROUND_DECRYPT_TIME
+            start = time.time()
             tensor = decrypt(tensor, ENCRYPTION_METHOD)
-            print(ENCRYPTION_METHOD)
+            elapsed = time.time() - start
+            ROUND_DECRYPT_TIME += elapsed
+         ##   print(f"[TIME][DECRYPT] Tensor {key} decifrato in {elapsed:.4f} sec")
 
         parameters.tensors.append(tensor)
 
@@ -115,12 +142,9 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         The ArrayRecord containing the provided parameters.
     """
     tensor_type = parameters.tensor_type
+    ##lista bytes
     num_arrays = len(parameters.tensors)
     ordered_dict = OrderedDict()
-
-    if ENCRYPTION_ENABLED:
-        total_size_before = sum(len(t) for t in parameters.tensors)
-        print(f"[ENCRYPT - ROUND] Total size before encryption: {total_size_before} bytes")
 
     for idx in range(num_arrays):
         if keep_input:
@@ -128,8 +152,18 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         else:
             tensor = parameters.tensors.pop(0)
 
+        raw_data = tensor
+       ## print(f"[TENSOR RAW] Tensor {idx} prima di crittografia: {len(raw_data)} bytes")
+
         if ENCRYPTION_ENABLED:
-            tensor = encrypt(tensor, ENCRYPTION_METHOD)
+            import time
+            global ROUND_ENCRYPT_TIME
+            start = time.time()
+            encrypted = encrypt(raw_data, ENCRYPTION_METHOD)
+            elapsed = time.time() - start
+            ROUND_ENCRYPT_TIME += elapsed
+         ##   print(f"[TIME][ENCRYPT] Tensor {idx} cifrato in {elapsed:.4f} sec")
+            tensor = encrypted
 
         ordered_dict[str(idx)] = Array(
             data=tensor, dtype="", stype=tensor_type, shape=()
@@ -140,9 +174,6 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             data=b"", dtype="", stype=tensor_type, shape=()
         )
 
-    if ENCRYPTION_ENABLED:
-        total_size_after = sum(len(arr.data) for arr in ordered_dict.values())
-        print(f"[ENCRYPT - ROUND] Total size after encryption: {total_size_after} bytes")
 
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
@@ -234,6 +265,8 @@ def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     print("Server serializza - fitins_to_recorddict")
     return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
 
+def get_total_times():
+    return TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
 
 def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     """Derive FitRes from a RecordDict object."""
@@ -250,6 +283,23 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     # pylint: disable-next=protected-access
     metrics = _check_mapping_from_recordscalartype_to_scalar(config_record)
     status = _extract_status_from_recorddict(ins_str, recorddict)
+    global ROUND_ENCRYPT_TIME, ROUND_DECRYPT_TIME,TOTAL_ENCRYPT_TIME,TOTAL_DECRYPT_TIME
+    TOTAL_ENCRYPT_TIME += ROUND_ENCRYPT_TIME
+    TOTAL_DECRYPT_TIME += ROUND_DECRYPT_TIME
+    print(f"[ROUNDS SUMMARY] Tempo totale cifratura: {ROUND_ENCRYPT_TIME:.4f} sec")
+    print(f"[ROUNDS SUMMARY] Tempo totale decifratura: {ROUND_DECRYPT_TIME:.4f} sec")
+    # Salvataggio misurazioni round
+    with open(CSV_PATH, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+                    # round corrente
+            ENCRYPTION_METHOD,          # nome algoritmo di cifratura
+            ROUND_ENCRYPT_TIME,         # tempo totale cifratura
+            ROUND_DECRYPT_TIME,         # tempo totale decifratura
+        ])
+
+    ROUND_ENCRYPT_TIME = 0.0
+    ROUND_DECRYPT_TIME = 0.0
 
     return FitRes(
         status=status, parameters=parameters, num_examples=num_examples, metrics=metrics

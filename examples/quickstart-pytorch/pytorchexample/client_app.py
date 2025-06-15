@@ -7,8 +7,7 @@ from opacus import PrivacyEngine
 
 from pytorchexample.task import Net, get_weights, load_data, set_weights, test, train
 
-USE_DP = True
-
+USE_DP = False
 # Define Flower Client
 class FlowerClient(NumPyClient):
     def __init__(self, trainloader, valloader, local_epochs, learning_rate):

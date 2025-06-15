@@ -20,6 +20,8 @@ import io
 import timeit
 from logging import INFO, WARN
 from typing import Optional, Union
+from flwr.common.recorddict_compat import get_total_times
+
 
 from flwr.common import (
     Code,
@@ -499,6 +501,9 @@ def run_fl(
     for line in io.StringIO(str(hist)):
         log(INFO, "\t%s", line.strip("\n"))
     log(INFO, "")
+    total_enc, total_dec = get_total_times()
+    total = total_enc + total_dec
+    print(f"[TOTAL] Tempo totale crypto totale: {total:.4f} sec")
 
     # Graceful shutdown
     server.disconnect_all_clients(timeout=config.round_timeout)
