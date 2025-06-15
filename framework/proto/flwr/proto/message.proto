@@ -20,6 +20,7 @@ package flwr.proto;
 import "flwr/proto/error.proto";
 import "flwr/proto/recorddict.proto";
 import "flwr/proto/transport.proto";
+import "flwr/proto/node.proto";
 
 message Message {
   Metadata metadata = 1;
@@ -45,4 +46,27 @@ message Metadata {
   double ttl = 7;
   string message_type = 8;
   double created_at = 9;
+}
+
+message ObjectIDs { repeated string object_ids = 1; }
+
+// PushObject messages
+message PushObjectRequest {
+  Node node = 1;
+  uint64 run_id = 2;
+  string object_id = 3;
+  bytes object_content = 4;
+}
+message PushObjectResponse { bool stored = 1; }
+
+// PullObject messages
+message PullObjectRequest {
+  Node node = 1;
+  uint64 run_id = 2;
+  string object_id = 3;
+}
+message PullObjectResponse {
+  bool object_found = 1;
+  bool object_available = 2;
+  bytes object_content = 3;
 }
