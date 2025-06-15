@@ -118,6 +118,10 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     num_arrays = len(parameters.tensors)
     ordered_dict = OrderedDict()
 
+    if ENCRYPTION_ENABLED:
+        total_size_before = sum(len(t) for t in parameters.tensors)
+        print(f"[ENCRYPT - ROUND] Total size before encryption: {total_size_before} bytes")
+
     for idx in range(num_arrays):
         if keep_input:
             tensor = parameters.tensors[idx]
@@ -135,6 +139,10 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         ordered_dict[EMPTY_TENSOR_KEY] = Array(
             data=b"", dtype="", stype=tensor_type, shape=()
         )
+
+    if ENCRYPTION_ENABLED:
+        total_size_after = sum(len(arr.data) for arr in ordered_dict.values())
+        print(f"[ENCRYPT - ROUND] Total size after encryption: {total_size_after} bytes")
 
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 

@@ -75,20 +75,27 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int):
     return trainloader, testloader
 
 
-def train(net, trainloader, valloader, epochs, learning_rate, device):
-    """Train the model on the training set."""
-    net.to(device)  # move model to GPU if available
+def train(net, trainloader, valloader, epochs, learning_rate, device, optimizer=None):
+    """Train the model on the training set, with optional custom optimizer (e.g. Opacus)."""
+    net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
+
+    # Se nessun optimizer viene passato (caso standard), lo creiamo
+    if optimizer is None:
+        optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
+
     net.train()
     for _ in range(epochs):
         for batch in trainloader:
-            images = batch["img"]
-            labels = batch["label"]
+            images = batch["img"].to(device)
+            labels = batch["label"].to(device)
             optimizer.zero_grad()
-            criterion(net(images.to(device)), labels.to(device)).backward()
+            outputs = net(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
             optimizer.step()
 
+    # Valutazione su validation set dopo l'addestramento
     val_loss, val_acc = test(net, valloader, device)
 
     results = {
@@ -96,6 +103,7 @@ def train(net, trainloader, valloader, epochs, learning_rate, device):
         "val_accuracy": val_acc,
     }
     return results
+
 
 
 def test(net, testloader, device):
