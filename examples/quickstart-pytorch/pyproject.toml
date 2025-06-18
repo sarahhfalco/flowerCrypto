@@ -32,11 +32,8 @@ learning-rate = 0.1
 batch-size = 32
 
 [tool.flwr.federations]
-default = "my-federation"
+default = "local-simulation"
 
-[tool.flwr.federations.my-federation]
-address = "127.0.0.1:9093" # Address of the Exec API
-root-certificates = "certificates/ca.crt"
 
 [tool.flwr.federations.local-simulation]
 options.num-supernodes = 3
