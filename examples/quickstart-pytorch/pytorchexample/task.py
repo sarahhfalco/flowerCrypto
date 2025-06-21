@@ -10,7 +10,9 @@ from flwr_datasets.partitioner import IidPartitioner
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 
+##Cambaito perchè non raggiunge soglia 70%
 
+#ORIGINALE
 class Net(nn.Module):
     """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
 
@@ -31,6 +33,23 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         return self.fc3(x)
 
+# class Net(nn.Module):
+#     def __init__(self):
+#         super(Net, self).__init__()
+#         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+#         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+#         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+#         self.pool = nn.MaxPool2d(2, 2)
+#         self.fc1 = nn.Linear(128 * 4 * 4, 256)
+#         self.fc2 = nn.Linear(256, 10)
+#
+#     def forward(self, x):
+#         x = self.pool(F.relu(self.conv1(x)))  # 32x32 → 16x16
+#         x = self.pool(F.relu(self.conv2(x)))  # 16x16 → 8x8
+#         x = self.pool(F.relu(self.conv3(x)))  # 8x8 → 4x4
+#         x = x.view(-1, 128 * 4 * 4)
+#         x = F.relu(self.fc1(x))
+#         return self.fc2(x)
 
 def get_weights(net):
     return [val.cpu().numpy() for _, val in net.state_dict().items()]
