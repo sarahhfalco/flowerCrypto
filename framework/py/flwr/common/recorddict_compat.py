@@ -46,13 +46,7 @@ from .typing import (
 
 EMPTY_TENSOR_KEY = "_empty"
 
-# Timer cumulativi globali per ogni round
-ROUND_ENCRYPT_TIME = 0.0
-ROUND_DECRYPT_TIME = 0.0
-TOTAL_ENCRYPT_TIME = 0.0
-TOTAL_DECRYPT_TIME = 0.0
 
-import os
 from flwr.common.encryption.config import ENCRYPTION_METHOD
 
 def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool, is_server:bool) -> Parameters:
@@ -88,14 +82,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool, is_server:b
         tensor = array.data
 
         if ENCRYPTION_ENABLED:
-            import time
-            global ROUND_DECRYPT_TIME
-            start = time.time()
             tensor = decrypt(tensor, ENCRYPTION_METHOD)
-            elapsed = time.time() - start
-            ROUND_DECRYPT_TIME += elapsed
-         ##   print(f"[TIME][DECRYPT] Tensor {key} decifrato in {elapsed:.4f} sec")
-
         parameters.tensors.append(tensor)
 
         if not keep_input:
@@ -142,13 +129,8 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool, is_serve
        ## print(f"[TENSOR RAW] Tensor {idx} prima di crittografia: {len(raw_data)} bytes")
 
         if ENCRYPTION_ENABLED:
-            import time
-            global ROUND_ENCRYPT_TIME
-            start = time.time()
             encrypted = encrypt(raw_data, ENCRYPTION_METHOD)
-            elapsed = time.time() - start
-            ROUND_ENCRYPT_TIME += elapsed
-         ##   print(f"[TIME][ENCRYPT] Tensor {idx} cifrato in {elapsed:.4f} sec")
+
             tensor = encrypted
 
         ordered_dict[str(idx)] = Array(
@@ -231,7 +213,7 @@ def _extract_status_from_recorddict(res_str: str, recorddict: RecordDict) -> Sta
 
 def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
     """Derive FitIns from a RecordDict object."""
-    print("Client deserializza - recorddict_to_fitins")
+  #  print("Client deserializza - recorddict_to_fitins")
     parameters, config = _recorddict_to_fit_or_evaluate_ins_components(
         recorddict,
         ins_str="fitins",
@@ -243,7 +225,7 @@ def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
 
 def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitIns object."""
-    print("Server serializza - fitins_to_recorddict")
+    #print("Server serializza - fitins_to_recorddict")
     return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input, True)
 
 def get_total_times():
@@ -251,7 +233,7 @@ def get_total_times():
 
 def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     """Derive FitRes from a RecordDict object."""
-    print("Server deserializza - recorddict_to_fitres")
+  # print("Server deserializza - recorddict_to_fitres")
     ins_str = "fitres"
     parameters = arrayrecord_to_parameters(
         recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input, is_server=True
@@ -264,14 +246,8 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     # pylint: disable-next=protected-access
     metrics = _check_mapping_from_recordscalartype_to_scalar(config_record)
     status = _extract_status_from_recorddict(ins_str, recorddict)
-    global ROUND_ENCRYPT_TIME, ROUND_DECRYPT_TIME,TOTAL_ENCRYPT_TIME,TOTAL_DECRYPT_TIME
-    TOTAL_ENCRYPT_TIME += ROUND_ENCRYPT_TIME
-    TOTAL_DECRYPT_TIME += ROUND_DECRYPT_TIME
-    print(f"[ROUNDS SUMMARY] Tempo totale cifratura: {ROUND_ENCRYPT_TIME:.4f} sec")
-    print(f"[ROUNDS SUMMARY] Tempo totale decifratura: {ROUND_DECRYPT_TIME:.4f} sec")
 
-    ROUND_ENCRYPT_TIME = 0.0
-    ROUND_DECRYPT_TIME = 0.0
+
 
     return FitRes(
         status=status, parameters=parameters, num_examples=num_examples, metrics=metrics
@@ -280,7 +256,7 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
 
 def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitRes object."""
-    print("Client serializza: fitres_to_recorddict")
+   # print("Client serializza: fitres_to_recorddict")
     recorddict = RecordDict()
 
     res_str = "fitres"
