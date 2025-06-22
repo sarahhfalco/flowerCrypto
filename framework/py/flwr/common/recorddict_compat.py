@@ -51,23 +51,11 @@ ROUND_ENCRYPT_TIME = 0.0
 ROUND_DECRYPT_TIME = 0.0
 TOTAL_ENCRYPT_TIME = 0.0
 TOTAL_DECRYPT_TIME = 0.0
-import csv
+
 import os
 from flwr.common.encryption.config import ENCRYPTION_METHOD
 
-CSV_PATH = "timings.csv"
-
-# Inizializza CSV se non esiste
-if not os.path.exists(CSV_PATH):
-    with open(CSV_PATH, mode="w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["encryption_scheme", "encrypt_time", "decrypt_time"])
-
-# Stampa header allineato (senza ROUND)
-print(f"{'SCHEMA':<12}{'ENCRYPT (s)':<14}{'DECRYPT (s)'}")
-
-
-def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Parameters:
+def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool, is_server:bool) -> Parameters:
     """Convert ParameterRecord to legacy Parameters.
 
     Warnings
@@ -118,9 +106,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
 
     return parameters
 
-
-
-def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> ArrayRecord:
+def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool, is_server: bool) -> ArrayRecord:
     """Convert legacy Parameters into a single ArrayRecord.
 
     Because there is no concept of names in the legacy Parameters, arbitrary keys will
@@ -177,7 +163,6 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
 
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
-
 def _check_mapping_from_recordscalartype_to_scalar(
     record_data: Mapping[str, Union[ConfigRecordValues, MetricRecordValues]]
 ) -> dict[str, Scalar]:
@@ -193,7 +178,6 @@ def _check_mapping_from_recordscalartype_to_scalar(
             )
     return cast(dict[str, Scalar], record_data)
 
-
 def _recorddict_to_fit_or_evaluate_ins_components(
     recorddict: RecordDict,
     ins_str: str,
@@ -203,7 +187,7 @@ def _recorddict_to_fit_or_evaluate_ins_components(
     # get Array and construct Parameters
     array_record = recorddict.array_records[f"{ins_str}.parameters"]
 
-    parameters = arrayrecord_to_parameters(array_record, keep_input=keep_input)
+    parameters = arrayrecord_to_parameters(array_record, keep_input=keep_input, is_server = False)
 
     # get config dict
     config_record = recorddict.config_records[f"{ins_str}.config"]
@@ -212,14 +196,13 @@ def _recorddict_to_fit_or_evaluate_ins_components(
 
     return parameters, config_dict
 
-
 def _fit_or_evaluate_ins_to_recorddict(
-    ins: Union[FitIns, EvaluateIns], keep_input: bool
+    ins: Union[FitIns, EvaluateIns], keep_input: bool, is_server: bool=False
 ) -> RecordDict:
     recorddict = RecordDict()
 
     ins_str = "fitins" if isinstance(ins, FitIns) else "evaluateins"
-    arr_record = parameters_to_arrayrecord(ins.parameters, keep_input)
+    arr_record = parameters_to_arrayrecord(ins.parameters, keep_input, is_server)
     recorddict.array_records[f"{ins_str}.parameters"] = arr_record
 
     recorddict.config_records[f"{ins_str}.config"] = ConfigRecord(
@@ -227,7 +210,6 @@ def _fit_or_evaluate_ins_to_recorddict(
     )
 
     return recorddict
-
 
 def _embed_status_into_recorddict(
     res_str: str, status: Status, recorddict: RecordDict
@@ -240,7 +222,6 @@ def _embed_status_into_recorddict(
     # and `str` values aren't supported in `MetricRecords`
     recorddict.config_records[f"{res_str}.status"] = ConfigRecord(status_dict)
     return recorddict
-
 
 def _extract_status_from_recorddict(res_str: str, recorddict: RecordDict) -> Status:
     status = recorddict.config_records[f"{res_str}.status"]
@@ -263,7 +244,7 @@ def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
 def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitIns object."""
     print("Server serializza - fitins_to_recorddict")
-    return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
+    return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input, True)
 
 def get_total_times():
     return TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
@@ -273,7 +254,7 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     print("Server deserializza - recorddict_to_fitres")
     ins_str = "fitres"
     parameters = arrayrecord_to_parameters(
-        recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input
+        recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input, is_server=True
     )
 
     num_examples = cast(
@@ -288,15 +269,6 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     TOTAL_DECRYPT_TIME += ROUND_DECRYPT_TIME
     print(f"[ROUNDS SUMMARY] Tempo totale cifratura: {ROUND_ENCRYPT_TIME:.4f} sec")
     print(f"[ROUNDS SUMMARY] Tempo totale decifratura: {ROUND_DECRYPT_TIME:.4f} sec")
-    # Salvataggio misurazioni round
-    with open(CSV_PATH, mode="a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-                    # round corrente
-            ENCRYPTION_METHOD,          # nome algoritmo di cifratura
-            ROUND_ENCRYPT_TIME,         # tempo totale cifratura
-            ROUND_DECRYPT_TIME,         # tempo totale decifratura
-        ])
 
     ROUND_ENCRYPT_TIME = 0.0
     ROUND_DECRYPT_TIME = 0.0
@@ -322,6 +294,7 @@ def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
     recorddict.array_records[f"{res_str}.parameters"] = parameters_to_arrayrecord(
         fitres.parameters,
         keep_input,
+        is_server=False
     )
 
     # status
@@ -420,7 +393,7 @@ def getparametersres_to_recorddict(
     recorddict = RecordDict()
     res_str = "getparametersres"
     array_record = parameters_to_arrayrecord(
-        getparametersres.parameters, keep_input=keep_input
+        getparametersres.parameters, keep_input=keep_input, is_server=False
     )
     recorddict.array_records[f"{res_str}.parameters"] = array_record
 
@@ -438,7 +411,7 @@ def recorddict_to_getparametersres(
     """Derive GetParametersRes from a RecordDict object."""
     res_str = "getparametersres"
     parameters = arrayrecord_to_parameters(
-        recorddict.array_records[f"{res_str}.parameters"], keep_input=keep_input
+        recorddict.array_records[f"{res_str}.parameters"], keep_input=keep_input, is_server=False
     )
 
     status = _extract_status_from_recorddict(res_str, recorddict)
