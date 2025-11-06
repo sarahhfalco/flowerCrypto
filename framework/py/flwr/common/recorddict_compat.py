@@ -18,6 +18,11 @@
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Union, cast, get_args
+from flwr.common.encryption.crypto_backend import encrypt, decrypt
+from flwr.common.encryption.config import ENCRYPTION_ENABLED, ENCRYPTION_METHOD
+
+
+
 
 from . import Array, ArrayRecord, ConfigRecord, MetricRecord, RecordDict
 from .typing import (
@@ -66,18 +71,26 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     parameters = Parameters(tensors=[], tensor_type="")
 
     for key in list(record.keys()):
-        if key != EMPTY_TENSOR_KEY:
-            parameters.tensors.append(record[key].data)
+        if key == EMPTY_TENSOR_KEY:
+            continue
 
-        if not parameters.tensor_type:
-            # Setting from first array in record. Recall the warning in the docstrings
-            # of this function.
-            parameters.tensor_type = record[key].stype
+        array = record[key]
+        tensor = array.data
+
+        if ENCRYPTION_ENABLED:
+            tensor = decrypt(tensor, ENCRYPTION_METHOD)
+            print(ENCRYPTION_METHOD)
+
+        parameters.tensors.append(tensor)
 
         if not keep_input:
             del record[key]
 
+        if not parameters.tensor_type:
+            parameters.tensor_type = array.stype
+
     return parameters
+
 
 
 def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> ArrayRecord:
@@ -102,14 +115,18 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         The ArrayRecord containing the provided parameters.
     """
     tensor_type = parameters.tensor_type
-
     num_arrays = len(parameters.tensors)
     ordered_dict = OrderedDict()
+
     for idx in range(num_arrays):
         if keep_input:
             tensor = parameters.tensors[idx]
         else:
             tensor = parameters.tensors.pop(0)
+
+        if ENCRYPTION_ENABLED:
+            tensor = encrypt(tensor, ENCRYPTION_METHOD)
+
         ordered_dict[str(idx)] = Array(
             data=tensor, dtype="", stype=tensor_type, shape=()
         )
@@ -118,6 +135,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         ordered_dict[EMPTY_TENSOR_KEY] = Array(
             data=b"", dtype="", stype=tensor_type, shape=()
         )
+
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
 
@@ -193,6 +211,7 @@ def _extract_status_from_recorddict(res_str: str, recorddict: RecordDict) -> Sta
 
 def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
     """Derive FitIns from a RecordDict object."""
+    print("Client deserializza - recorddict_to_fitins")
     parameters, config = _recorddict_to_fit_or_evaluate_ins_components(
         recorddict,
         ins_str="fitins",
@@ -204,11 +223,13 @@ def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
 
 def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitIns object."""
+    print("Server serializza - fitins_to_recorddict")
     return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
 
 
 def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     """Derive FitRes from a RecordDict object."""
+    print("Server deserializza - recorddict_to_fitres")
     ins_str = "fitres"
     parameters = arrayrecord_to_parameters(
         recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input
@@ -229,6 +250,7 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
 
 def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitRes object."""
+    print("Client serializza: fitres_to_recorddict")
     recorddict = RecordDict()
 
     res_str = "fitres"

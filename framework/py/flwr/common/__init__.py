@@ -67,6 +67,7 @@ from .typing import Scalar as Scalar
 from .typing import ServerMessage as ServerMessage
 from .typing import Status as Status
 
+
 __all__ = [
     "Array",
     "ArrayRecord",
@@ -118,5 +119,5 @@ __all__ = [
     "ndarray_to_bytes",
     "ndarrays_to_parameters",
     "now",
-    "parameters_to_ndarrays",
+    "parameters_to_ndarrays"
 ]
