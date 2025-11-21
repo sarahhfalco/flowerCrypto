@@ -29,6 +29,8 @@ class ServerConfig:
 
     num_rounds: int = 1
     round_timeout: Optional[float] = None
+    target_accuracy: Optional[float] = None
+    target_accuracy_key: str = "accuracy"
 
     def __repr__(self) -> str:
         """Return the string representation of the ServerConfig."""
@@ -37,4 +39,12 @@ class ServerConfig:
             if self.round_timeout is None
             else f"round_timeout={self.round_timeout}s"
         )
-        return f"num_rounds={self.num_rounds}, {timeout_string}"
+        accuracy_string = (
+            "no target_accuracy"
+            if self.target_accuracy is None
+            else f"target_accuracy={self.target_accuracy} ({self.target_accuracy_key})"
+        )
+        return (
+            f"num_rounds={self.num_rounds}, {timeout_string}, "
+            f"{accuracy_string}"
+        )
