@@ -17,6 +17,7 @@
 
 import pprint
 from functools import reduce
+from typing import Optional
 
 from flwr.common.typing import Scalar
 
@@ -30,6 +31,7 @@ class History:
         self.metrics_distributed_fit: dict[str, list[tuple[int, Scalar]]] = {}
         self.metrics_distributed: dict[str, list[tuple[int, Scalar]]] = {}
         self.metrics_centralized: dict[str, list[tuple[int, Scalar]]] = {}
+        self.time_to_target_accuracy: Optional[float] = None
 
     def add_loss_distributed(self, server_round: int, loss: float) -> None:
         """Add one loss entry (from distributed evaluation)."""
@@ -120,5 +122,10 @@ class History:
         if self.metrics_centralized:
             rep += "History (metrics, centralized):\n" + pprint.pformat(
                 self.metrics_centralized
+            )
+        if self.time_to_target_accuracy is not None:
+            rep += (
+                "\nTime to target accuracy: "
+                f"{self.time_to_target_accuracy:.2f}s"
             )
         return rep

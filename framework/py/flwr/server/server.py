@@ -84,9 +84,49 @@ class Server:
         return self._client_manager
 
     # pylint: disable=too-many-locals
-    def fit(self, num_rounds: int, timeout: Optional[float]) -> tuple[History, float]:
-        """Run federated averaging for a number of rounds."""
+    def fit(
+        self,
+        num_rounds: int,
+        timeout: Optional[float],
+        target_accuracy: Optional[float] = None,
+        target_accuracy_key: str = "accuracy",
+    ) -> tuple[History, float]:
+        """Run federated averaging for a number of rounds.
+
+        Parameters
+        ----------
+        num_rounds : int
+            Total number of rounds to run.
+        timeout : Optional[float]
+            Timeout value forwarded to client instructions.
+        target_accuracy : Optional[float]
+            If provided, wall-clock time will be captured the first time the
+            aggregated metrics include ``target_accuracy_key`` meeting or
+            exceeding this value.
+        target_accuracy_key : str
+            Metric key to inspect for the target accuracy threshold.
+        """
+
         history = History()
+
+        start_time = timeit.default_timer()
+        time_to_target: Optional[float] = None
+
+        def maybe_set_time_to_target(metrics: dict[str, Scalar]) -> None:
+            nonlocal time_to_target
+            if target_accuracy is None or time_to_target is not None:
+                return
+            metric_value = metrics.get(target_accuracy_key)
+            if metric_value is None:
+                return
+
+            try:
+                numeric_value = float(metric_value)
+            except (TypeError, ValueError):
+                return
+
+            if numeric_value >= target_accuracy:
+                time_to_target = timeit.default_timer() - start_time
 
         # Initialize parameters
         log(INFO, "[INIT]")
@@ -102,11 +142,11 @@ class Server:
             )
             history.add_loss_centralized(server_round=0, loss=res[0])
             history.add_metrics_centralized(server_round=0, metrics=res[1])
+            maybe_set_time_to_target(res[1])
         else:
             log(INFO, "Evaluation returned no results (`None`)")
 
         # Run federated learning for num_rounds
-        start_time = timeit.default_timer()
 
         for current_round in range(1, num_rounds + 1):
             log(INFO, "")
@@ -140,6 +180,7 @@ class Server:
                 history.add_metrics_centralized(
                     server_round=current_round, metrics=metrics_cen
                 )
+                maybe_set_time_to_target(metrics_cen)
 
             # Evaluate model on a sample of available clients
             res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
@@ -152,10 +193,12 @@ class Server:
                     history.add_metrics_distributed(
                         server_round=current_round, metrics=evaluate_metrics_fed
                     )
+                    maybe_set_time_to_target(evaluate_metrics_fed)
 
         # Bookkeeping
         end_time = timeit.default_timer()
         elapsed = end_time - start_time
+        history.time_to_target_accuracy = time_to_target
         return history, elapsed
 
     def evaluate_round(
@@ -490,12 +533,23 @@ def run_fl(
 ) -> History:
     """Train a model on the given server and return the History object."""
     hist, elapsed_time = server.fit(
-        num_rounds=config.num_rounds, timeout=config.round_timeout
+        num_rounds=config.num_rounds,
+        timeout=config.round_timeout,
+        target_accuracy=config.target_accuracy,
+        target_accuracy_key=config.target_accuracy_key,
     )
 
     log(INFO, "")
     log(INFO, "[SUMMARY]")
     log(INFO, "Run finished %s round(s) in %.2fs", config.num_rounds, elapsed_time)
+    if hist.time_to_target_accuracy is not None:
+        log(
+            INFO,
+            "Target accuracy reached in %.2fs (metric: %s, threshold: %s)",
+            hist.time_to_target_accuracy,
+            config.target_accuracy_key,
+            config.target_accuracy,
+        )
     for line in io.StringIO(str(hist)):
         log(INFO, "\t%s", line.strip("\n"))
     log(INFO, "")
