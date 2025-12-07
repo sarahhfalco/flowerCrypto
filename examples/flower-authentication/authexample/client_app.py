@@ -14,7 +14,10 @@ app = ClientApp()
 @app.train()
 def train(msg: Message, context: Context):
     """Train the model on local data."""
-
+    if "num-cores" in context.node_config:
+        num_cores = int(context.node_config["num-cores"])
+        torch.set_num_threads(num_cores) # Intra-op parallelism
+        torch.set_num_interop_threads(num_cores)  # Inter-op parallelism
     # Read from run config
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]

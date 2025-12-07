@@ -97,6 +97,6 @@ def get_server_evaluate_fn(testset_path: str = "datasets/cifar10_part_1", batch_
         loss, accuracy = test(model, testloader, device)
         print(f"[SERVER EVAL] Round {server_round}: loss={loss:.4f}, acc={accuracy:.4f}")
 
-        return loss, {"accuracy": accuracy}
+        return {"loss": loss, "accuracy": accuracy}
 
     return evaluate
