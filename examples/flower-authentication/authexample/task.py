@@ -82,3 +82,21 @@ def test(net, testloader, device):
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
     return loss, accuracy
+
+def get_server_evaluate_fn(testset_path: str = "datasets/cifar10_part_1", batch_size: int = 32):
+
+    _, testloader = load_data_from_disk(testset_path, batch_size=batch_size)
+
+    device = "cpu"
+    model = Net().to(device)
+
+    def evaluate(server_round, parameters, config=None):   # <-- FIX DEFINITIVO
+        state_dict = parameters.to_torch_state_dict()
+        model.load_state_dict(state_dict, strict=True)
+
+        loss, accuracy = test(model, testloader, device)
+        print(f"[SERVER EVAL] Round {server_round}: loss={loss:.4f}, acc={accuracy:.4f}")
+
+        return loss, {"accuracy": accuracy}
+
+    return evaluate

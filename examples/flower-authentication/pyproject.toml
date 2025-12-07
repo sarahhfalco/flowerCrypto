@@ -26,7 +26,7 @@ clientapp = "authexample.client_app:app"
 
 [tool.flwr.app.config]
 num-server-rounds = 3
-fraction-evaluate = 0.5
+fraction-evaluate = 0.0
 local-epochs = 1
 learning-rate = 0.1
 batch-size = 32

@@ -6,6 +6,7 @@ from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg
 
 from authexample.task import Net
+from authexample.task import get_server_evaluate_fn
 
 # Create ServerApp
 app = ServerApp()
@@ -31,6 +32,7 @@ def main(grid: Grid, context: Context) -> None:
         grid=grid,
         initial_arrays=arrays,
         num_rounds=num_rounds,
+        evaluate_fn=get_server_evaluate_fn()
     )
 
     # Save final model to disk
