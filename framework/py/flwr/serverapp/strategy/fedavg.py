@@ -82,7 +82,7 @@ class FedAvg(Strategy):
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
-        fraction_train: float = 1.0,
+        fraction_train: float = 0.2,
         fraction_evaluate: float = 1.0,
         min_train_nodes: int = 2,
         min_evaluate_nodes: int = 2,
