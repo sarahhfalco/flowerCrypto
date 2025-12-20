@@ -32,7 +32,10 @@ def main(grid: Grid, context: Context) -> None:
         grid=grid,
         initial_arrays=arrays,
         num_rounds=num_rounds,
-        evaluate_fn=get_server_evaluate_fn()
+        evaluate_fn=get_server_evaluate_fn(),
+        stop_metric_key="accuracy",
+        stop_metric_threshold=0.30,  # ← soglia decisa da te
+        stop_after_round=1,
     )
 
     # Save final model to disk

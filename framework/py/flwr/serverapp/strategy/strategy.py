@@ -140,6 +140,9 @@ class Strategy(ABC):
         train_config: ConfigRecord | None = None,
         evaluate_config: ConfigRecord | None = None,
         evaluate_fn: Callable[[int, ArrayRecord], MetricRecord | None] | None = None,
+        stop_metric_key: str = "accuracy",
+        stop_metric_threshold: float | None = None,
+        stop_after_round: int = 1,
     ) -> Result:
         """Execute the federated learning strategy.
 
@@ -269,6 +272,22 @@ class Strategy(ABC):
                 log(INFO, "\t└──> MetricRecord: %s", res)
                 if res is not None:
                     result.evaluate_metrics_serverapp[current_round] = res
+                    if (
+                            stop_metric_threshold is not None
+                            and current_round >= stop_after_round
+                            and stop_metric_key in res
+                    ):
+                        value = float(res[stop_metric_key])
+                        if value >= stop_metric_threshold:
+                            log(
+                                INFO,
+                                "Early stopping triggered at round %d: %s=%.4f >= %.4f",
+                                current_round,
+                                stop_metric_key,
+                                value,
+                                stop_metric_threshold,
+                            )
+                            break
 
         log(INFO, "")
         log(INFO, "Strategy execution finished in %.2fs", time.time() - t_start)
