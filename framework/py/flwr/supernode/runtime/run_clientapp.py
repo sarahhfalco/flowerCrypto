@@ -15,9 +15,11 @@
 """Flower ClientApp process."""
 
 
+from collections.abc import Iterable
 from logging import DEBUG, ERROR, INFO
 
 import grpc
+import os
 
 from flwr.app.error import Error
 from flwr.cli.install import install_from_fab
@@ -31,6 +33,7 @@ from flwr.common.grpc import create_channel, on_channel_state_change
 from flwr.common.inflatable import (
     get_all_nested_objects,
     get_object_tree,
+    iterate_object_tree,
     no_object_id_recompute,
 )
 from flwr.common.inflatable_protobuf_utils import (
@@ -38,7 +41,12 @@ from flwr.common.inflatable_protobuf_utils import (
     make_pull_object_fn_protobuf,
     make_push_object_fn_protobuf,
 )
-from flwr.common.inflatable_utils import pull_and_inflate_object_from_tree, push_objects
+from flwr.common.inflatable_utils import (
+    inflate_object_from_contents,
+    pull_objects,
+    push_object_contents_from_iterable,
+)
+from flwr.common.crypto.message_crypto import get_message_crypto
 from flwr.common.logger import log
 from flwr.common.message import remove_content_from_message
 from flwr.common.retry_invoker import _make_simple_grpc_retry_invoker, _wrap_stub
@@ -187,14 +195,36 @@ def pull_clientappinputs(
         run_id = context.run_id
         node = Node(node_id=context.node_id)
         object_tree = pull_msg_res.message_object_trees[0]
-        message = pull_and_inflate_object_from_tree(
-            object_tree,
-            make_pull_object_fn_protobuf(stub.PullObject, node, run_id),
-            make_confirm_message_received_fn_protobuf(
-                stub.ConfirmMessageReceived, node, run_id
-            ),
-            return_type=Message,
+        crypto_type = context.run_config.get("message-crypto") or os.environ.get(
+            "FLWR_MESSAGE_CRYPTO"
         )
+        crypto_key = context.run_config.get("message-crypto-key") or os.environ.get(
+            "FLWR_MESSAGE_CRYPTO_KEY"
+        )
+        message_crypto = get_message_crypto(
+            {"type": crypto_type or "none", "key": crypto_key}
+        )
+
+        pulled_object_contents = pull_objects(
+            [tree.object_id for tree in iterate_object_tree(object_tree)],
+            make_pull_object_fn_protobuf(stub.PullObject, node, run_id),
+        )
+        decrypted_object_contents = {
+            obj_id: message_crypto.decrypt(content)
+            for obj_id, content in pulled_object_contents.items()
+        }
+        make_confirm_message_received_fn_protobuf(
+            stub.ConfirmMessageReceived, node, run_id
+        )(object_tree.object_id)
+        message = inflate_object_from_contents(
+            object_tree.object_id,
+            decrypted_object_contents,
+            keep_object_contents=False,
+        )
+        if not isinstance(message, Message):
+            raise TypeError(
+                f"Expected object of type Message, but got {type(message).__name__}."
+            )
 
         # Set the message ID
         # The deflated message doesn't contain the message_id (its own object_id)
@@ -236,17 +266,34 @@ def push_clientappoutputs(
             # Retrieve the object IDs to push
             object_ids_to_push = set(push_msg_res.objects_to_push)
 
+            crypto_type = context.run_config.get("message-crypto") or os.environ.get(
+                "FLWR_MESSAGE_CRYPTO"
+            )
+            crypto_key = context.run_config.get("message-crypto-key") or os.environ.get(
+                "FLWR_MESSAGE_CRYPTO_KEY"
+            )
+            message_crypto = get_message_crypto(
+                {"type": crypto_type or "none", "key": crypto_key}
+            )
+
             # Push all objects
             all_objects = get_all_nested_objects(message)
             del message
-            push_objects(
-                all_objects,
+            def iter_object_contents() -> Iterable[tuple[str, bytes]]:
+                for obj_id in list(all_objects.keys()):
+                    if obj_id not in object_ids_to_push:
+                        continue
+                    obj = all_objects[obj_id]
+                    del all_objects[obj_id]
+                    yield obj_id, message_crypto.encrypt(obj.deflate())
+
+            push_object_contents_from_iterable(
+                iter_object_contents(),
                 make_push_object_fn_protobuf(
                     stub.PushObject,
                     Node(node_id=context.node_id),
                     run_id=context.run_id,
                 ),
-                object_ids_to_push=object_ids_to_push,
             )
 
         # Push Context
