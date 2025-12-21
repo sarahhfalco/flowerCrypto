@@ -25,11 +25,12 @@ serverapp = "authexample.server_app:app"
 clientapp = "authexample.client_app:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 3
+num-server-rounds = 100
 fraction-evaluate = 0.0
 local-epochs = 1
 learning-rate = 0.1
 batch-size = 32
+stop_metric_threshold=0.3
 
 [tool.flwr.federations]
 default = "my-federation"
