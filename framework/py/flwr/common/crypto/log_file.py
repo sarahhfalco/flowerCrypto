@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .config_cripto import ENCRYPTION_METHOD, ENCRYPTION_ENABLED
 
@@ -71,8 +71,8 @@ def finalize_round_timing(
     round_number: int,
     round_elapsed: float,
     *,
-    accuracy_centralized: float | None = None,
-    accuracy_federated: float | None = None,
+    accuracy_centralized: Optional[float] = None,
+    accuracy_federated: Optional[float] = None,
 ) -> Dict[str, float]:
     without_crypto = max(round_elapsed - ROUND_CRYPTO_TIME, 0.0)
     summary = {
@@ -195,5 +195,59 @@ def generate_report_pdf(path: str = "crypto_report.pdf") -> str:
                 line = f"{line} | " + " ".join(accuracy_parts)
             lines.append(line)
     _write_simple_pdf(path, lines)
+    REPORT_GENERATED = True
+    return path
+
+def generate_report_txt(path: str = "crypto_report.txt") -> str:
+    """Generate a human-readable text report for crypto/timing results."""
+    global REPORT_GENERATED
+    if REPORT_GENERATED:
+        return path
+    if not ROUND_SUMMARIES:
+        lines = ["Nessun dato di round disponibile."]
+    else:
+        total_time = sum(item["round_time"] for item in ROUND_SUMMARIES)
+        total_crypto = sum(item["crypto_time"] for item in ROUND_SUMMARIES)
+        total_without = sum(item["without_crypto"] for item in ROUND_SUMMARIES)
+        total_impact = (total_crypto / total_time * 100.0) if total_time > 0 else 0.0
+        encryption_info = (
+            f"Crittografia: {ENCRYPTION_METHOD}"
+            if ENCRYPTION_ENABLED
+            else "Crittografia: disabilitata"
+        )
+        lines = [
+            "Report risultati crittografia",
+            encryption_info,
+            f"Round totali: {len(ROUND_SUMMARIES)}",
+            (
+                "Tempo totale: "
+                f"{total_time:.2f}s | critto={total_crypto:.2f}s "
+                f"| senza_critto={total_without:.2f}s | impatto={total_impact:.1f}%"
+            ),
+            f"Generato: {datetime.now().isoformat(timespec='seconds')}",
+            "Dettaglio round:",
+        ]
+        for item in ROUND_SUMMARIES:
+            impact = (
+                item["crypto_time"] / item["round_time"] * 100.0
+                if item["round_time"] > 0
+                else 0.0
+            )
+            line = (
+                f"- Round {int(item['round'])}: totale={item['round_time']:.2f}s "
+                f"| critto={item['crypto_time']:.2f}s "
+                f"| senza_critto={item['without_crypto']:.2f}s "
+                f"| impatto={impact:.1f}%"
+            )
+            accuracy_parts = []
+            if "accuracy_centralized" in item:
+                accuracy_parts.append(f"acc_cen={item['accuracy_centralized']:.4f}")
+            if "accuracy_federated" in item:
+                accuracy_parts.append(f"acc_fed={item['accuracy_federated']:.4f}")
+            if accuracy_parts:
+                line = f"{line} | " + " ".join(accuracy_parts)
+            lines.append(line)
+    with open(path, "w", encoding="utf-8") as txt_file:
+        txt_file.write("\n".join(lines))
     REPORT_GENERATED = True
     return path

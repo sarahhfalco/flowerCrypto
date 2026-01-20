@@ -181,7 +181,7 @@ class Server:
                 summary["without_crypto"],
             )
             if log_file.is_report_requested() and not log_file.is_report_generated():
-                report_path = log_file.generate_report_pdf()
+                report_path = log_file.generate_report_txt()
                 log_time("Report crittografia generato: %s", report_path)
 
             history.add_metrics_centralized(
