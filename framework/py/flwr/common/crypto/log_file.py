@@ -10,6 +10,7 @@ ROUND_CRYPTO_TIME = 0.0
 ROUND_SUMMARIES: List[Dict[str, float]] = []
 REPORT_REQUESTED = False
 REPORT_GENERATED = False
+REPORT_TXT_GENERATED = False
 
 def init_csv():
     global CSV_PATH, CSV_INITIALIZED
@@ -88,6 +89,9 @@ def is_report_requested() -> bool:
 def is_report_generated() -> bool:
     return REPORT_GENERATED
 
+def is_report_txt_generated() -> bool:
+    return REPORT_TXT_GENERATED
+
 def _escape_pdf_text(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
@@ -152,4 +156,59 @@ def generate_report_pdf(path: str = "crypto_report.pdf") -> str:
         ]
     _write_simple_pdf(path, lines)
     REPORT_GENERATED = True
+    return path
+
+def _build_txt_report_lines() -> List[str]:
+    encryption_label = (
+        f"attiva ({ENCRYPTION_METHOD})" if ENCRYPTION_ENABLED else "disattivata"
+    )
+    lines = [
+        "Report crittografia - riepilogo round",
+        f"Crittografia: {encryption_label}",
+        f"Generato: {datetime.now().isoformat(timespec='seconds')}",
+        "",
+    ]
+    if not ROUND_SUMMARIES:
+        lines.append("Nessun dato di round disponibile.")
+        return lines
+
+    total_time = sum(item["round_time"] for item in ROUND_SUMMARIES)
+    total_crypto = sum(item["crypto_time"] for item in ROUND_SUMMARIES)
+    total_without = sum(item["without_crypto"] for item in ROUND_SUMMARIES)
+    impact_pct = (total_crypto / total_time * 100.0) if total_time > 0 else 0.0
+    lines.extend(
+        [
+            f"Tempo totale: {total_time:.2f}s",
+            f"Tempo crittografia: {total_crypto:.2f}s",
+            f"Tempo senza critto: {total_without:.2f}s",
+            f"Impatto crittografia: {impact_pct:.2f}%",
+            "",
+            "Dettaglio per round:",
+        ]
+    )
+    for item in ROUND_SUMMARIES:
+        round_time = item["round_time"]
+        crypto_time = item["crypto_time"]
+        without_crypto = item["without_crypto"]
+        round_impact = (crypto_time / round_time * 100.0) if round_time > 0 else 0.0
+        lines.append(
+            "Round {round_num}: totale={total:.2f}s | crypto={crypto:.2f}s "
+            "| senza_critto={without:.2f}s | impatto={impact:.2f}%".format(
+                round_num=int(item["round"]),
+                total=round_time,
+                crypto=crypto_time,
+                without=without_crypto,
+                impact=round_impact,
+            )
+        )
+    return lines
+
+def generate_report_txt(path: str = "crypto_report.txt") -> str:
+    global REPORT_TXT_GENERATED
+    if REPORT_TXT_GENERATED:
+        return path
+    lines = _build_txt_report_lines()
+    with open(path, "w", encoding="utf-8") as txt_file:
+        txt_file.write("\n".join(lines) + "\n")
+    REPORT_TXT_GENERATED = True
     return path
