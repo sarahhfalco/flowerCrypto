@@ -23,6 +23,9 @@ class KoblitzCurve:
 
 
 SUPPORTED_CURVES: Dict[str, KoblitzCurve] = {
+    "KOBLITZ_112": KoblitzCurve("KOBLITZ_112", 112),
+    "KOBLITZ_256": KoblitzCurve("KOBLITZ_256", 256),
+    "KOBLITZ_512": KoblitzCurve("KOBLITZ_512", 512),
     "KOBLITZ_SMALL": KoblitzCurve("KOBLITZ_SMALL", 112),
     "KOBLITZ_MEDIUM": KoblitzCurve("KOBLITZ_MEDIUM", 256),
     "KOBLITZ_LARGE": KoblitzCurve("KOBLITZ_LARGE", 512),
