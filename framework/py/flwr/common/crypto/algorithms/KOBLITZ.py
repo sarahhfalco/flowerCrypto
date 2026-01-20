@@ -23,17 +23,30 @@ class KoblitzCurve:
 
 
 SUPPORTED_CURVES: Dict[str, KoblitzCurve] = {
-    "KOBLITZ_112": KoblitzCurve("KOBLITZ_112", 112),
-    "KOBLITZ_256": KoblitzCurve("KOBLITZ_256", 256),
-    "KOBLITZ_512": KoblitzCurve("KOBLITZ_512", 512),
+    "KOBLITZ_SMALL": KoblitzCurve("KOBLITZ_SMALL", 112),
+    "KOBLITZ_MEDIUM": KoblitzCurve("KOBLITZ_MEDIUM", 256),
+    "KOBLITZ_LARGE": KoblitzCurve("KOBLITZ_LARGE", 512),
 }
+
+LEGACY_ALIASES: Dict[str, str] = {
+    "KOBLITZ_112": "KOBLITZ_SMALL",
+    "KOBLITZ_256": "KOBLITZ_MEDIUM",
+    "KOBLITZ_512": "KOBLITZ_LARGE",
+}
+
+SUPPORTED_METHODS = set(SUPPORTED_CURVES.keys()) | set(LEGACY_ALIASES.keys())
 
 
 def _get_curve(curve_name: str) -> KoblitzCurve:
+    normalized_name = LEGACY_ALIASES.get(curve_name, curve_name)
     try:
-        return SUPPORTED_CURVES[curve_name]
+        return SUPPORTED_CURVES[normalized_name]
     except KeyError as exc:  # pragma: no cover - safety net
         raise ValueError(f"Curva Koblitz non supportata: {curve_name}") from exc
+
+
+def is_supported_method(curve_name: str) -> bool:
+    return curve_name in SUPPORTED_METHODS
 
 
 def _derive_keystream(curve: KoblitzCurve, secret: bytes, length: int) -> bytes:
