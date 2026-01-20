@@ -122,7 +122,6 @@ class Server:
                 break
 
             round_start = timeit.default_timer()
-            log_file.reset_round_timing()
             log(INFO, "[ROUND %s]", current_round)
             log_time(f"[ROUND {current_round}]")
 
@@ -163,17 +162,7 @@ class Server:
             # Fine round: calcolo e log del tempo
             round_elapsed = timeit.default_timer() - round_start
 
-            summary = log_file.finalize_round_timing(current_round, round_elapsed)
-            log_time(
-                "Tempo round %s: totale=%.2f s | crypto=%.2f s | senza_critto=%.2f s",
-                current_round,
-                round_elapsed,
-                summary["crypto_time"],
-                summary["without_crypto"],
-            )
-            if log_file.is_report_requested() and not log_file.is_report_generated():
-                report_path = log_file.generate_report_pdf()
-                log_time("Report crittografia generato: %s", report_path)
+            log_time("Tempo totale round %s: %.2f s", current_round, round_elapsed)
 
             history.add_metrics_centralized(
                 server_round=current_round,

@@ -1,3 +1,5 @@
+from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+
 from .algorithms import (
     AES, HMAC, CHACHA_AEAD, CHACHA, AES_GCM, KOBLITZ)
 
@@ -12,8 +14,10 @@ def encrypt(data: bytes, method: str, ecc_pubkey=None) -> bytes:
         return CHACHA_AEAD.encrypt(data)
     elif method == "AES_GCM":
         return AES_GCM.encrypt(data)
-    elif KOBLITZ.is_supported_method(method):
+    elif method in KOBLITZ.SUPPORTED_CURVES:
         return KOBLITZ.encrypt(data, method)
+
+
     else:
         raise ValueError(f"Unknown encryption method: {method}")
 
@@ -29,8 +33,10 @@ def decrypt(data: bytes, method: str, ecc_privkey=None) -> bytes:
         return CHACHA_AEAD.decrypt(data)
     elif method == "AES_GCM":
         return AES_GCM.decrypt(data)
-    elif KOBLITZ.is_supported_method(method):
+    elif method in KOBLITZ.SUPPORTED_CURVES:
         return KOBLITZ.decrypt(data, method)
+
+
     else:
         raise ValueError(f"Unknown decryption method: {method}")
 
@@ -45,5 +51,7 @@ def check_integrity(data: bytes, method: str) -> bytes:
         return HMAC.check_hmac(data)
     else:
         raise ValueError(f"Unknown integrity method: {method}")
+
+
 
 

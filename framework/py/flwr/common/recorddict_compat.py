@@ -96,17 +96,13 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
 
     # LOG TEMPI REALI
     total_time = total_deser_time + total_decrypt_time
-    crypto_impact = (total_decrypt_time / total_time * 100.0) if total_time > 0 else 0.0
-    log_time(
-        "CRYPTO STATUS: enabled=%s method=%s | DESERIALIZE: %.5f s | CRYPTO: %.5f s | TOTAL: %.5f s | IMPACT: %.2f%%",
-        ENCRYPTION_ENABLED,
-        ENCRYPTION_METHOD,
-        total_deser_time,
-        total_decrypt_time,
-        total_time,
-        crypto_impact,
-    )
-    log_file.add_crypto_time(total_decrypt_time)
+
+    # log_time(
+    #     "DESERIALIZZAZIONE PURA: %.5f s | DECRYPT/INTEGRITY: %.5f s | TOTALE: %.5f s",
+    #     total_deser_time,
+    #     total_decrypt_time,
+    #     total_time,
+    # )
 
     return parameters
 
@@ -157,18 +153,12 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         )
 
     # LOG
-    total_time = tot_serial_time + tot_crypto_time
-    crypto_impact = (tot_crypto_time / total_time * 100.0) if total_time > 0 else 0.0
-    log_time(
-        "CRYPTO STATUS: enabled=%s method=%s | SERIALIZE: %.5f s | CRYPTO: %.5f s | TOTAL: %.5f s | IMPACT: %.2f%%",
-        ENCRYPTION_ENABLED,
-        ENCRYPTION_METHOD,
-        tot_serial_time,
-        tot_crypto_time,
-        total_time,
-        crypto_impact,
-    )
-    log_file.add_crypto_time(tot_crypto_time)
+    # log_time(
+    #     "SERIALIZZAZIONE PURA: %.5f s | CRITTOGRAFIA: %.5f s | TOTALE: %.5f s",
+    #     tot_serial_time,
+    #     tot_crypto_time,
+    #     tot_serial_time + tot_crypto_time,
+    #     )
 
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
