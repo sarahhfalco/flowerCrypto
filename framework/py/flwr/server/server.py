@@ -138,6 +138,7 @@ class Server:
 
             # Evaluate model using strategy implementation
             res_cen = self.strategy.evaluate(current_round, parameters=self.parameters)
+            accuracy_centralized: Optional[float] = None
             if res_cen is not None:
                 loss_cen, metrics_cen = res_cen
                 log(INFO, "fit progress: (%s, %s, %s, %s)",
@@ -149,21 +150,29 @@ class Server:
                 )
                 print("metrics_cen",metrics_cen )
                 if "accuracy" in metrics_cen:
+                    accuracy_centralized = float(metrics_cen["accuracy"])
                     log_time("Round %s Accuracy (centralized): %.4f", current_round, metrics_cen["accuracy"])
 
             # Evaluate model on a sample of available clients
             res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
+            accuracy_federated: Optional[float] = None
             if res_fed is not None:
                 loss_fed, evaluate_metrics_fed, _ = res_fed
                 if loss_fed is not None:
                     history.add_loss_distributed(server_round=current_round, loss=loss_fed)
                     history.add_metrics_distributed(server_round=current_round, metrics=evaluate_metrics_fed)
                     if "accuracy" in evaluate_metrics_fed:
+                       accuracy_federated = float(evaluate_metrics_fed["accuracy"])
                        log_time("Round %s Accuracy (federated): %.4f", current_round, evaluate_metrics_fed["accuracy"])
             # Fine round: calcolo e log del tempo
             round_elapsed = timeit.default_timer() - round_start
 
-            summary = log_file.finalize_round_timing(current_round, round_elapsed)
+            summary = log_file.finalize_round_timing(
+                current_round,
+                round_elapsed,
+                accuracy_centralized=accuracy_centralized,
+                accuracy_federated=accuracy_federated,
+            )
             log_time(
                 "Tempo round %s: totale=%.2f s | crypto=%.2f s | senza_critto=%.2f s",
                 current_round,
@@ -172,7 +181,7 @@ class Server:
                 summary["without_crypto"],
             )
             if log_file.is_report_requested() and not log_file.is_report_generated():
-                report_path = log_file.generate_report_pdf()
+                report_path = log_file.generate_report_txt()
                 log_time("Report crittografia generato: %s", report_path)
 
             history.add_metrics_centralized(
