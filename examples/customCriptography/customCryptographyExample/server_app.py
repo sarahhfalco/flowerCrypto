@@ -10,6 +10,7 @@ from collections import OrderedDict
 import torch
 from flwr.common import Context, NDArrays, Scalar, parameters_to_ndarrays
 
+from flwr.common.crypto import log_file
 from flwr.common.crypto.log_file import log_time
 
 from .task import get_model, get_weights, set_weights, test, get_validation_data
@@ -67,6 +68,7 @@ class FedAvgWithServerEval(FedAvg):
 
                 if accuracy >= ACCURACY:
                     print(f"🎯 Accuratezza target ({ACCURACY:.4f}) raggiunta. Arresto controllato del training.")
+                    log_file.request_report_generation()
                     self.stop_triggered = True
 
         except Exception as e:
