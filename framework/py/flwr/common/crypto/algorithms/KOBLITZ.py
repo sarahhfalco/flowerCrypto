@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Dict
 
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 
@@ -23,9 +23,6 @@ class KoblitzCurve:
 
 
 SUPPORTED_CURVES: Dict[str, KoblitzCurve] = {
-    "KOBLITZ_112": KoblitzCurve("KOBLITZ_112", 112),
-    "KOBLITZ_256": KoblitzCurve("KOBLITZ_256", 256),
-    "KOBLITZ_512": KoblitzCurve("KOBLITZ_512", 512),
     "KOBLITZ_SMALL": KoblitzCurve("KOBLITZ_SMALL", 112),
     "KOBLITZ_MEDIUM": KoblitzCurve("KOBLITZ_MEDIUM", 256),
     "KOBLITZ_LARGE": KoblitzCurve("KOBLITZ_LARGE", 512),
@@ -55,11 +52,19 @@ def is_supported_method(curve_name: str) -> bool:
 def _derive_keystream(curve: KoblitzCurve, secret: bytes, length: int) -> bytes:
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
-        length=length,
+        length=32,
         salt=None,
         info=curve.name.encode(),
     )
-    return hkdf.derive(secret)
+    prk = hkdf.derive(secret)
+    keystream = bytearray()
+    counter = 1
+    while len(keystream) < length:
+        hmac_ctx = hmac.HMAC(prk, hashes.SHA256())
+        hmac_ctx.update(counter.to_bytes(4, "big"))
+        keystream.extend(hmac_ctx.finalize())
+        counter += 1
+    return bytes(keystream[:length])
 
 
 def encrypt(data: bytes, curve_name: str) -> bytes:
