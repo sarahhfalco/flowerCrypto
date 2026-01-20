@@ -106,6 +106,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
         total_time,
         crypto_impact,
     )
+    log_file.add_crypto_time(total_decrypt_time)
 
     return parameters
 
@@ -167,6 +168,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         total_time,
         crypto_impact,
     )
+    log_file.add_crypto_time(tot_crypto_time)
 
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
