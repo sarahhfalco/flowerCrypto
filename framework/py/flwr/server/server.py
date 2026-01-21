@@ -133,8 +133,6 @@ class Server:
             # Train model
             round_fit_clients = 0
             round_eval_clients = 0
-            fit_parallel_factor = 0
-            eval_parallel_factor = 0
             res_fit = self.fit_round(server_round=current_round, timeout=timeout)
             if res_fit is not None:
                 parameters_prime, fit_metrics, _ = res_fit  # fit_metrics_aggregated
@@ -143,12 +141,7 @@ class Server:
                 history.add_metrics_distributed_fit(
                     server_round=current_round, metrics=fit_metrics
                 )
-                fit_payload = res_fit[2]
-                if len(fit_payload) == 3:
-                    fit_results, _, fit_parallel_factor = fit_payload
-                else:
-                    fit_results, _ = fit_payload
-                    fit_parallel_factor = 1
+                fit_results, _ = res_fit[2]
                 round_fit_clients = len(fit_results)
 
             # Evaluate model using strategy implementation
@@ -175,19 +168,18 @@ class Server:
                     history.add_metrics_distributed(server_round=current_round, metrics=evaluate_metrics_fed)
                     if "accuracy" in evaluate_metrics_fed:
                        log_time("Round %s Accuracy (federated): %.4f", current_round, evaluate_metrics_fed["accuracy"])
-                eval_payload = res_fed[2]
-                if len(eval_payload) == 3:
-                    eval_results, _, eval_parallel_factor = eval_payload
-                else:
-                    eval_results, _ = eval_payload
-                    eval_parallel_factor = 1
+                eval_results, _ = res_fed[2]
                 round_eval_clients = len(eval_results)
             # Fine round: calcolo e log del tempo
             round_elapsed = timeit.default_timer() - round_start
             current_crypto_total, _ = log_file.get_crypto_totals()
             round_crypto_time = max(current_crypto_total - prev_crypto_total, 0.0)
             prev_crypto_total = current_crypto_total
-            parallel_factor = max(fit_parallel_factor, eval_parallel_factor, 1)
+            sampled_clients = max(round_fit_clients, round_eval_clients, 1)
+            if self.max_workers is not None and self.max_workers > 0:
+                parallel_factor = max(1, min(self.max_workers, sampled_clients))
+            else:
+                parallel_factor = sampled_clients
             parallel_crypto_time = min(
                 round_crypto_time / parallel_factor, round_elapsed
             )
