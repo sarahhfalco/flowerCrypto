@@ -18,6 +18,7 @@
 import concurrent.futures
 import io
 import os
+import threading
 import timeit
 from logging import INFO, WARN
 from typing import Optional, Union
@@ -52,6 +53,8 @@ EvaluateResultsAndFailures = tuple[
     list[tuple[ClientProxy, EvaluateRes]],
     list[Union[tuple[ClientProxy, EvaluateRes], BaseException]],
 ]
+FitResultsFailuresAndParallel = tuple[FitResultsAndFailures, int]
+EvaluateResultsFailuresAndParallel = tuple[EvaluateResultsAndFailures, int]
 ReconnectResultsAndFailures = tuple[
     list[tuple[ClientProxy, DisconnectRes]],
     list[Union[tuple[ClientProxy, DisconnectRes], BaseException]],
@@ -212,7 +215,7 @@ class Server:
         server_round: int,
         timeout: Optional[float],
     ) -> Optional[
-        tuple[Optional[float], dict[str, Scalar], EvaluateResultsAndFailures]
+        tuple[Optional[float], dict[str, Scalar], EvaluateResultsFailuresAndParallel]
     ]:
         """Validate current global model on a number of clients."""
         # Get clients and their respective instructions from strategy
@@ -232,7 +235,7 @@ class Server:
         )
 
         # Collect `evaluate` results from all clients participating in this round
-        results, failures = evaluate_clients(
+        (results, failures), parallel_factor = evaluate_clients(
             client_instructions,
             max_workers=self.max_workers,
             timeout=timeout,
@@ -252,14 +255,18 @@ class Server:
         ] = self.strategy.aggregate_evaluate(server_round, results, failures)
 
         loss_aggregated, metrics_aggregated = aggregated_result
-        return loss_aggregated, metrics_aggregated, (results, failures)
+        return loss_aggregated, metrics_aggregated, (
+            results,
+            failures,
+            parallel_factor,
+        )
 
     def fit_round(
         self,
         server_round: int,
         timeout: Optional[float],
     ) -> Optional[
-        tuple[Optional[Parameters], dict[str, Scalar], FitResultsAndFailures]
+        tuple[Optional[Parameters], dict[str, Scalar], FitResultsFailuresAndParallel]
     ]:
         """Perform a single round of federated averaging."""
         # Get clients and their respective instructions from strategy
@@ -280,7 +287,7 @@ class Server:
         )
 
         # Collect `fit` results from all clients participating in this round
-        results, failures = fit_clients(
+        (results, failures), parallel_factor = fit_clients(
             client_instructions=client_instructions,
             max_workers=self.max_workers,
             timeout=timeout,
@@ -300,7 +307,11 @@ class Server:
         ] = self.strategy.aggregate_fit(server_round, results, failures)
 
         parameters_aggregated, metrics_aggregated = aggregated_result
-        return parameters_aggregated, metrics_aggregated, (results, failures)
+        return parameters_aggregated, metrics_aggregated, (
+            results,
+            failures,
+            parallel_factor,
+        )
 
     def disconnect_all_clients(self, timeout: Optional[float]) -> None:
         """Send shutdown signal to all clients."""
@@ -392,11 +403,28 @@ def fit_clients(
     max_workers: Optional[int],
     timeout: Optional[float],
     group_id: int,
-) -> FitResultsAndFailures:
+) -> tuple[FitResultsAndFailures, int]:
     """Refine parameters concurrently on all selected clients."""
+    max_concurrency = 0
+    active_tasks = 0
+    lock = threading.Lock()
+
+    def tracked_fit(
+        client_proxy: ClientProxy, ins: FitIns, timeout: Optional[float], group_id: int
+    ) -> tuple[ClientProxy, FitRes]:
+        nonlocal max_concurrency, active_tasks
+        with lock:
+            active_tasks += 1
+            max_concurrency = max(max_concurrency, active_tasks)
+        try:
+            return fit_client(client_proxy, ins, timeout, group_id)
+        finally:
+            with lock:
+                active_tasks -= 1
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         submitted_fs = {
-            executor.submit(fit_client, client_proxy, ins, timeout, group_id)
+            executor.submit(tracked_fit, client_proxy, ins, timeout, group_id)
             for client_proxy, ins in client_instructions
         }
         finished_fs, _ = concurrent.futures.wait(
@@ -411,7 +439,7 @@ def fit_clients(
         _handle_finished_future_after_fit(
             future=future, results=results, failures=failures
         )
-    return results, failures
+    return (results, failures), max_concurrency
 
 
 def fit_client(
@@ -452,11 +480,31 @@ def evaluate_clients(
     max_workers: Optional[int],
     timeout: Optional[float],
     group_id: int,
-) -> EvaluateResultsAndFailures:
+) -> tuple[EvaluateResultsAndFailures, int]:
     """Evaluate parameters concurrently on all selected clients."""
+    max_concurrency = 0
+    active_tasks = 0
+    lock = threading.Lock()
+
+    def tracked_evaluate(
+        client_proxy: ClientProxy,
+        ins: EvaluateIns,
+        timeout: Optional[float],
+        group_id: int,
+    ) -> tuple[ClientProxy, EvaluateRes]:
+        nonlocal max_concurrency, active_tasks
+        with lock:
+            active_tasks += 1
+            max_concurrency = max(max_concurrency, active_tasks)
+        try:
+            return evaluate_client(client_proxy, ins, timeout, group_id)
+        finally:
+            with lock:
+                active_tasks -= 1
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         submitted_fs = {
-            executor.submit(evaluate_client, client_proxy, ins, timeout, group_id)
+            executor.submit(tracked_evaluate, client_proxy, ins, timeout, group_id)
             for client_proxy, ins in client_instructions
         }
         finished_fs, _ = concurrent.futures.wait(
@@ -471,7 +519,7 @@ def evaluate_clients(
         _handle_finished_future_after_evaluate(
             future=future, results=results, failures=failures
         )
-    return results, failures
+    return (results, failures), max_concurrency
 
 
 def evaluate_client(
