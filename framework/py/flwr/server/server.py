@@ -166,17 +166,11 @@ class Server:
             current_crypto_total, _ = log_file.get_crypto_totals()
             round_crypto_time = max(current_crypto_total - prev_crypto_total, 0.0)
             prev_crypto_total = current_crypto_total
-            parallel_factor = max(self.max_workers, 1)
-            parallel_crypto_time = min(
-                round_crypto_time / parallel_factor, round_elapsed
-            )
-            without_crypto = max(round_elapsed - parallel_crypto_time, 0.0)
+            without_crypto = max(round_elapsed - round_crypto_time, 0.0)
             log_file.ROUND_SUMMARIES.append({
                 "round": current_round,
                 "round_time": round_elapsed,
-                "crypto_time": parallel_crypto_time,
-                "crypto_cumulative": round_crypto_time,
-                "parallel_factor": float(parallel_factor),
+                "crypto_time": round_crypto_time,
                 "without_crypto": without_crypto,
             })
 
