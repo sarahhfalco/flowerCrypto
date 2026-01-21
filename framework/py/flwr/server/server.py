@@ -181,6 +181,11 @@ class Server:
             )
 
         # Bookkeeping
+        if log_file.is_report_requested():
+            log_time("=== Report tempi round ===")
+            for line in log_file.build_round_time_report():
+                log_time(line)
+
         end_time = timeit.default_timer()
 
         elapsed= end_time - start_time

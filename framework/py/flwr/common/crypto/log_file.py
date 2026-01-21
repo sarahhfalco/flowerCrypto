@@ -153,3 +153,42 @@ def generate_report_pdf(path: str = "crypto_report.pdf") -> str:
     _write_simple_pdf(path, lines)
     REPORT_GENERATED = True
     return path
+
+def get_round_summaries() -> List[Dict[str, float]]:
+    return list(ROUND_SUMMARIES)
+
+def build_round_time_report() -> List[str]:
+    if not ROUND_SUMMARIES:
+        return ["Nessun dato di round disponibile."]
+
+    lines = []
+    total_round_time = 0.0
+    total_crypto_time = 0.0
+    for summary in ROUND_SUMMARIES:
+        round_time = summary["round_time"]
+        crypto_time = summary["crypto_time"]
+        without_crypto = summary["without_crypto"]
+        impact = (crypto_time / round_time * 100.0) if round_time > 0 else 0.0
+        lines.append(
+            "Round {round_num}: totale={round_time:.2f}s | "
+            "crypto={crypto_time:.2f}s ({impact:.2f}%) | "
+            "senza_critto={without_crypto:.2f}s".format(
+                round_num=int(summary["round"]),
+                round_time=round_time,
+                crypto_time=crypto_time,
+                impact=impact,
+                without_crypto=without_crypto,
+            )
+        )
+        total_round_time += round_time
+        total_crypto_time += crypto_time
+
+    total_impact = (total_crypto_time / total_round_time * 100.0) if total_round_time > 0 else 0.0
+    lines.append(
+        "Totale critto: {total_crypto:.2f}s su {total_round:.2f}s ({impact:.2f}%)".format(
+            total_crypto=total_crypto_time,
+            total_round=total_round_time,
+            impact=total_impact,
+        )
+    )
+    return lines
