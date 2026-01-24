@@ -23,6 +23,8 @@ from typing import Optional
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import (
+    load_pem_private_key,
+    load_pem_public_key,
     load_ssh_private_key,
     load_ssh_public_key,
 )
@@ -210,32 +212,42 @@ def _try_setup_client_authentication(
     if not args.auth_supernode_private_key or not args.auth_supernode_public_key:
         flwr_exit(ExitCode.SUPERNODE_NODE_AUTH_KEYS_REQUIRED)
 
-    try:
-        ssh_private_key = load_ssh_private_key(
-            Path(args.auth_supernode_private_key).read_bytes(),
-            None,
-        )
-        if not isinstance(ssh_private_key, ec.EllipticCurvePrivateKey):
-            raise ValueError()
-    except (ValueError, UnsupportedAlgorithm):
-        flwr_exit(
-            ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
-            "Unable to parse the private key file.",
-        )
+    private_key_bytes = Path(args.auth_supernode_private_key).read_bytes()
+    public_key_bytes = Path(args.auth_supernode_public_key).read_bytes()
 
-    try:
-        ssh_public_key = load_ssh_public_key(
-            Path(args.auth_supernode_public_key).read_bytes()
-        )
-        if not isinstance(ssh_public_key, ec.EllipticCurvePublicKey):
-            raise ValueError()
-    except (ValueError, UnsupportedAlgorithm):
-        flwr_exit(
-            ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
-            "Unable to parse the public key file.",
-        )
+    private_key = _load_ec_private_key(private_key_bytes)
+    public_key = _load_ec_public_key(public_key_bytes)
 
-    return (
-        ssh_private_key,
-        ssh_public_key,
+    return (private_key, public_key)
+
+
+def _load_ec_private_key(key_bytes: bytes) -> ec.EllipticCurvePrivateKey:
+    for loader in (load_ssh_private_key, load_pem_private_key):
+        try:
+            key = loader(key_bytes, password=None)
+        except (ValueError, UnsupportedAlgorithm, TypeError):
+            continue
+        if isinstance(key, ec.EllipticCurvePrivateKey):
+            return key
+
+    flwr_exit(
+        ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
+        "Unable to parse the private key file.",
     )
+    raise RuntimeError("Unreachable private key parser")
+
+
+def _load_ec_public_key(key_bytes: bytes) -> ec.EllipticCurvePublicKey:
+    for loader in (load_ssh_public_key, load_pem_public_key):
+        try:
+            key = loader(key_bytes)
+        except (ValueError, UnsupportedAlgorithm, TypeError):
+            continue
+        if isinstance(key, ec.EllipticCurvePublicKey):
+            return key
+
+    flwr_exit(
+        ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
+        "Unable to parse the public key file.",
+    )
+    raise RuntimeError("Unreachable public key parser")
