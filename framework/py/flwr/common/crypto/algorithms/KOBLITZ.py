@@ -7,11 +7,15 @@ Non espone funzioni di cifratura.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
+import time
 from typing import Dict
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,7 @@ def _ensure_curve_matches(curve: KoblitzCurve, key_curve: ec.EllipticCurve) -> N
 def generate_keypair(curve_name: str) -> tuple[bytes, bytes]:
     """Genera una coppia di chiavi (privata, pubblica) in formato PEM."""
 
+    start_time = time.perf_counter()
     curve = _get_curve(curve_name)
     private_key = ec.generate_private_key(curve.curve)
     private_pem = private_key.private_bytes(
@@ -77,21 +82,36 @@ def generate_keypair(curve_name: str) -> tuple[bytes, bytes]:
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
+    elapsed = time.perf_counter() - start_time
+    logger.info(
+        "KOBLITZ keypair generated (curve=%s, elapsed=%.6f s)",
+        curve.name,
+        elapsed,
+    )
     return private_pem, public_pem
 
 
 def sign(data: bytes, private_key_pem: bytes, curve_name: str) -> bytes:
     """Firma i dati con la chiave privata usando ECDSA."""
+    start_time = time.perf_counter()
     curve = _get_curve(curve_name)
     private_key = serialization.load_pem_private_key(private_key_pem, password=None)
     if not isinstance(private_key, ec.EllipticCurvePrivateKey):
         raise TypeError("Chiave privata non valida per ECDSA")
     _ensure_curve_matches(curve, private_key.curve)
-    return private_key.sign(data, ec.ECDSA(hashes.SHA256()))
+    signature = private_key.sign(data, ec.ECDSA(hashes.SHA256()))
+    elapsed = time.perf_counter() - start_time
+    logger.info(
+        "KOBLITZ signature created (curve=%s, elapsed=%.6f s)",
+        curve.name,
+        elapsed,
+    )
+    return signature
 
 
 def verify(data: bytes, signature: bytes, public_key_pem: bytes, curve_name: str) -> bool:
     """Verifica la firma ECDSA usando la chiave pubblica."""
+    start_time = time.perf_counter()
     curve = _get_curve(curve_name)
     public_key = serialization.load_pem_public_key(public_key_pem)
     if not isinstance(public_key, ec.EllipticCurvePublicKey):
@@ -100,5 +120,17 @@ def verify(data: bytes, signature: bytes, public_key_pem: bytes, curve_name: str
     try:
         public_key.verify(signature, data, ec.ECDSA(hashes.SHA256()))
     except InvalidSignature:
+        elapsed = time.perf_counter() - start_time
+        logger.info(
+            "KOBLITZ signature rejected (curve=%s, elapsed=%.6f s)",
+            curve.name,
+            elapsed,
+        )
         return False
+    elapsed = time.perf_counter() - start_time
+    logger.info(
+        "KOBLITZ signature verified (curve=%s, elapsed=%.6f s)",
+        curve.name,
+        elapsed,
+    )
     return True
