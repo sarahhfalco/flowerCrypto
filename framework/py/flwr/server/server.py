@@ -645,6 +645,8 @@ def run_fl(
         auth_impact,
         total_serial_time,
     )
+    for line in log_file.build_overhead_report():
+        log_time(line)
 
     # 📩 Messaggio Telegram
     #send_telegram_file(null,"Ho finito!!!!")

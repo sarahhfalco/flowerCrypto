@@ -8,14 +8,21 @@ CSV_INITIALIZED = False
 TOTAL_CRYPTO_TIME = 0.0
 TOTAL_SERIAL_TIME = 0.0
 TOTAL_AUTH_TIME = 0.0
+TOTAL_OVERHEAD_BYTES = 0
+TOTAL_PLAINTEXT_BYTES = 0
+OVERHEAD_BY_METHOD: Dict[str, int] = {}
 
 
 def reset_crypto_totals() -> None:
     """Reset accumulated crypto/serialization totals."""
     global TOTAL_CRYPTO_TIME, TOTAL_SERIAL_TIME, TOTAL_AUTH_TIME
+    global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES, OVERHEAD_BY_METHOD
     TOTAL_CRYPTO_TIME = 0.0
     TOTAL_SERIAL_TIME = 0.0
     TOTAL_AUTH_TIME = 0.0
+    TOTAL_OVERHEAD_BYTES = 0
+    TOTAL_PLAINTEXT_BYTES = 0
+    OVERHEAD_BY_METHOD = {}
 
 
 def add_crypto_time(crypto_time: float, serial_time: float) -> None:
@@ -39,6 +46,49 @@ def get_crypto_totals() -> tuple[float, float]:
 def get_auth_totals() -> float:
     """Return accumulated authentication totals."""
     return TOTAL_AUTH_TIME
+
+
+def add_overhead(method: str, added_bytes: int, base_bytes: int) -> None:
+    """Accumulate overhead bytes per method and total payload size."""
+    global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES, OVERHEAD_BY_METHOD
+    TOTAL_OVERHEAD_BYTES += added_bytes
+    TOTAL_PLAINTEXT_BYTES += base_bytes
+    OVERHEAD_BY_METHOD[method] = OVERHEAD_BY_METHOD.get(method, 0) + added_bytes
+
+
+def get_overhead_totals() -> tuple[int, int]:
+    """Return total overhead and plaintext bytes."""
+    return TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES
+
+
+def build_overhead_report() -> List[str]:
+    if not OVERHEAD_BY_METHOD:
+        return ["Nessun dato di overhead disponibile."]
+
+    lines = []
+    total_overhead, total_plaintext = get_overhead_totals()
+    total_impact = (
+        (total_overhead / total_plaintext * 100.0)
+        if total_plaintext > 0
+        else 0.0
+    )
+    lines.append(
+        "Overhead totale: {overhead} B su {base} B ({impact:.2f}%)".format(
+            overhead=total_overhead,
+            base=total_plaintext,
+            impact=total_impact,
+        )
+    )
+    for method, added in sorted(OVERHEAD_BY_METHOD.items()):
+        impact = (added / total_plaintext * 100.0) if total_plaintext > 0 else 0.0
+        lines.append(
+            "Overhead {method}: {added} B ({impact:.2f}%)".format(
+                method=method,
+                added=added,
+                impact=impact,
+            )
+        )
+    return lines
 
 ROUND_SUMMARIES: List[Dict[str, float]] = []
 
