@@ -27,6 +27,7 @@ SUPPORTED_CURVES: Dict[str, KoblitzCurve] = {
     "KOBLITZ_SMALL": KoblitzCurve("KOBLITZ_SMALL", 112),
     "KOBLITZ_MEDIUM": KoblitzCurve("KOBLITZ_MEDIUM", 256),
     "KOBLITZ_LARGE": KoblitzCurve("KOBLITZ_LARGE", 512),
+    "CURVE25519": KoblitzCurve("CURVE25519", 256),
 }
 
 LEGACY_ALIASES: Dict[str, str] = {
