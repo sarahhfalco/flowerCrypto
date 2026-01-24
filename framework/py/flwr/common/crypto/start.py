@@ -15,7 +15,13 @@ ENCRYPTION_METHODS = [
     "KOBLITZ_LARGE",
 ]
 INTEGRITY_METHODS = ["HMAC"]
-AUTH_METHODS = ["KOBLITZ_112", "KOBLITZ_256", "KOBLITZ_512", "CURVE25519"]
+AUTH_METHODS = [
+    "KOBLITZ_112",
+    "KOBLITZ_256",
+    "KOBLITZ_512",
+    "CURVE25519",
+    "CURVE448",
+]
 NET_OPTIONS = ["custom_cnn", "resnet18", "resnet34", "tiny_cnn", "squeezenet"]
 EVALUATION_OPTIONS = ["server", "client"]
 
