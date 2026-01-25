@@ -11,18 +11,26 @@ TOTAL_AUTH_TIME = 0.0
 TOTAL_OVERHEAD_BYTES = 0
 TOTAL_PLAINTEXT_BYTES = 0
 OVERHEAD_BY_METHOD: Dict[str, int] = {}
+OVERHEAD_COUNT_BY_METHOD: Dict[str, int] = {}
+OVERHEAD_BY_CATEGORY: Dict[str, int] = {}
+OVERHEAD_COUNT_BY_CATEGORY: Dict[str, int] = {}
 
 
 def reset_crypto_totals() -> None:
     """Reset accumulated crypto/serialization totals."""
     global TOTAL_CRYPTO_TIME, TOTAL_SERIAL_TIME, TOTAL_AUTH_TIME
-    global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES, OVERHEAD_BY_METHOD
+    global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES
+    global OVERHEAD_BY_METHOD, OVERHEAD_COUNT_BY_METHOD
+    global OVERHEAD_BY_CATEGORY, OVERHEAD_COUNT_BY_CATEGORY
     TOTAL_CRYPTO_TIME = 0.0
     TOTAL_SERIAL_TIME = 0.0
     TOTAL_AUTH_TIME = 0.0
     TOTAL_OVERHEAD_BYTES = 0
     TOTAL_PLAINTEXT_BYTES = 0
     OVERHEAD_BY_METHOD = {}
+    OVERHEAD_COUNT_BY_METHOD = {}
+    OVERHEAD_BY_CATEGORY = {}
+    OVERHEAD_COUNT_BY_CATEGORY = {}
 
 
 def add_crypto_time(crypto_time: float, serial_time: float) -> None:
@@ -48,12 +56,24 @@ def get_auth_totals() -> float:
     return TOTAL_AUTH_TIME
 
 
-def add_overhead(method: str, added_bytes: int, base_bytes: int) -> None:
+def add_overhead(
+    method: str,
+    category: str,
+    added_bytes: int,
+    base_bytes: int,
+) -> None:
     """Accumulate overhead bytes per method and total payload size."""
-    global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES, OVERHEAD_BY_METHOD
+    global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES
+    global OVERHEAD_BY_METHOD, OVERHEAD_COUNT_BY_METHOD
+    global OVERHEAD_BY_CATEGORY, OVERHEAD_COUNT_BY_CATEGORY
     TOTAL_OVERHEAD_BYTES += added_bytes
     TOTAL_PLAINTEXT_BYTES += base_bytes
     OVERHEAD_BY_METHOD[method] = OVERHEAD_BY_METHOD.get(method, 0) + added_bytes
+    OVERHEAD_COUNT_BY_METHOD[method] = OVERHEAD_COUNT_BY_METHOD.get(method, 0) + 1
+    OVERHEAD_BY_CATEGORY[category] = OVERHEAD_BY_CATEGORY.get(category, 0) + added_bytes
+    OVERHEAD_COUNT_BY_CATEGORY[category] = (
+        OVERHEAD_COUNT_BY_CATEGORY.get(category, 0) + 1
+    )
 
 
 def get_overhead_totals() -> tuple[int, int]:
@@ -80,12 +100,24 @@ def build_overhead_report() -> List[str]:
         )
     )
     for method, added in sorted(OVERHEAD_BY_METHOD.items()):
+        count = OVERHEAD_COUNT_BY_METHOD.get(method, 0)
+        avg = (added / count) if count > 0 else 0.0
         impact = (added / total_plaintext * 100.0) if total_plaintext > 0 else 0.0
         lines.append(
-            "Overhead {method}: {added} B ({impact:.2f}%)".format(
+            "Overhead {method}: {added} B ({impact:.2f}%) | medio={avg:.2f} B/msg".format(
                 method=method,
                 added=added,
                 impact=impact,
+                avg=avg,
+            )
+        )
+    for category, added in sorted(OVERHEAD_BY_CATEGORY.items()):
+        count = OVERHEAD_COUNT_BY_CATEGORY.get(category, 0)
+        avg = (added / count) if count > 0 else 0.0
+        lines.append(
+            "Overhead medio {category}: {avg:.2f} B/msg".format(
+                category=category,
+                avg=avg,
             )
         )
     return lines

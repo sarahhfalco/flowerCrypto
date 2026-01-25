@@ -171,7 +171,12 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             dataR = encrypt(dataR, ENCRYPTION_METHOD)
             end_encrypt = time.perf_counter()
             tot_crypto_time += (end_encrypt - start_encrypt)
-            log_file.add_overhead(ENCRYPTION_METHOD, len(dataR) - base_bytes, base_bytes)
+            log_file.add_overhead(
+                ENCRYPTION_METHOD,
+                "crypto",
+                len(dataR) - base_bytes,
+                base_bytes,
+            )
             base_bytes = len(dataR)
 
         if INTEGRITY_ENABLED:
@@ -179,7 +184,12 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             dataR = add_integrity(dataR, INTEGRITY_METHOD)
             end_integrity = time.perf_counter()
             tot_crypto_time += (end_integrity - start_integrity)
-            log_file.add_overhead(INTEGRITY_METHOD, len(dataR) - base_bytes, base_bytes)
+            log_file.add_overhead(
+                INTEGRITY_METHOD,
+                "integrity",
+                len(dataR) - base_bytes,
+                base_bytes,
+            )
             base_bytes = len(dataR)
 
         if AUTH_ENABLED:
@@ -188,7 +198,12 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             end_auth = time.perf_counter()
             auth_elapsed = end_auth - start_auth
             tot_auth_time += auth_elapsed
-            log_file.add_overhead(AUTH_METHOD, len(dataR) - base_bytes, base_bytes)
+            log_file.add_overhead(
+                AUTH_METHOD,
+                "auth",
+                len(dataR) - base_bytes,
+                base_bytes,
+            )
 
         # --- COSTRUZIONE ARRAY ---
         ordered_dict[str(idx)] = Array(
