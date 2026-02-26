@@ -1,4 +1,5 @@
 from flwr.common import Context, Metrics, ndarrays_to_parameters, parameters_to_ndarrays
+import logging
 from flwr.common.logger import log
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
@@ -26,6 +27,52 @@ def weighted_average(metrics):
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     return {"accuracy": sum(accuracies) / sum(examples)}
+
+
+def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
+    """Aggregate and print per-client CPU metrics returned by fit()."""
+    if not metrics:
+        return {}
+
+    total_examples = sum(num_examples for num_examples, _ in metrics)
+    weighted_cpu_time = 0.0
+    weighted_wall_time = 0.0
+    weighted_core_equiv = 0.0
+    weighted_cpu_pct = 0.0
+
+    for idx, (num_examples, metric) in enumerate(metrics, start=1):
+        cpu_time = float(metric.get("cpu_fit", 0.0))
+        wall_time = float(metric.get("fit_wall_time", 0.0))
+        core_equiv = float(metric.get("fit_core_equiv", 0.0))
+        cpu_pct = float(metric.get("fit_cpu_pct", 0.0))
+        fit_round = metric.get("fit_round", "unknown")
+
+        weighted_cpu_time += cpu_time * num_examples
+        weighted_wall_time += wall_time * num_examples
+        weighted_core_equiv += core_equiv * num_examples
+        weighted_cpu_pct += cpu_pct * num_examples
+
+        log(
+            logging.INFO,
+            "[Round %s] Client-%s metrics | examples=%s | cpu_time=%.3fs | wall_time=%.3fs | core_equiv=%.2f | cpu_pct=%.2f%%",
+            fit_round,
+            idx,
+            num_examples,
+            cpu_time,
+            wall_time,
+            core_equiv,
+            cpu_pct,
+        )
+
+    if total_examples == 0:
+        return {}
+
+    return {
+        "cpu_fit": weighted_cpu_time / total_examples,
+        "fit_wall_time": weighted_wall_time / total_examples,
+        "fit_core_equiv": weighted_core_equiv / total_examples,
+        "fit_cpu_pct": weighted_cpu_pct / total_examples,
+    }
 
 
 class FedAvgWithServerEval(FedAvg):
@@ -145,6 +192,7 @@ def server_fn(context: Context):
         evaluate_fn=server_side,
         initial_parameters=parameters,
         evaluate_metrics_aggregation_fn=weighted_average,
+        fit_metrics_aggregation_fn=aggregate_fit_metrics,
         stop_criteria={"metric_ge": ("accuracy", ACCURACY),
         },
     )
