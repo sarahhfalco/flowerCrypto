@@ -45,43 +45,47 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
         return {}
 
     total_examples = sum(num_examples for num_examples, _ in metrics)
-    weighted_cpu_time = 0.0
-    weighted_wall_time = 0.0
-    weighted_core_equiv = 0.0
-    weighted_cpu_pct = 0.0
+    tempo_cpu_pesato = 0.0
+    tempo_reale_pesato = 0.0
+    core_equivalenti_pesati = 0.0
+    percentuale_cpu_pesata = 0.0
 
     for idx, (num_examples, metric) in enumerate(metrics, start=1):
-        cpu_time = float(metric.get("cpu_fit", 0.0))
-        wall_time = float(metric.get("fit_wall_time", 0.0))
-        core_equiv = float(metric.get("fit_core_equiv", 0.0))
-        cpu_pct = float(metric.get("fit_cpu_pct", 0.0))
+        tempo_cpu = float(metric.get("tempo_cpu_fit", metric.get("cpu_fit", 0.0)))
+        tempo_reale = float(metric.get("tempo_reale_fit", metric.get("fit_wall_time", 0.0)))
+        core_equivalenti = float(metric.get("core_equivalenti_fit", metric.get("fit_core_equiv", 0.0)))
+        percentuale_cpu = float(metric.get("percentuale_cpu_fit", metric.get("fit_cpu_pct", 0.0)))
         fit_round = metric.get("fit_round", "unknown")
 
-        weighted_cpu_time += cpu_time * num_examples
-        weighted_wall_time += wall_time * num_examples
-        weighted_core_equiv += core_equiv * num_examples
-        weighted_cpu_pct += cpu_pct * num_examples
+        tempo_cpu_pesato += tempo_cpu * num_examples
+        tempo_reale_pesato += tempo_reale * num_examples
+        core_equivalenti_pesati += core_equivalenti * num_examples
+        percentuale_cpu_pesata += percentuale_cpu * num_examples
 
         log(
             logging.INFO,
-            "[Round %s] Client-%s metrics | examples=%s | cpu_time=%.3fs | wall_time=%.3fs | core_equiv=%.2f | cpu_pct=%.2f%%",
+            "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%%",
             fit_round,
             idx,
             num_examples,
-            cpu_time,
-            wall_time,
-            core_equiv,
-            cpu_pct,
+            tempo_cpu,
+            tempo_reale,
+            core_equivalenti,
+            percentuale_cpu,
         )
 
     if total_examples == 0:
         return {}
 
     return {
-        "cpu_fit": weighted_cpu_time / total_examples,
-        "fit_wall_time": weighted_wall_time / total_examples,
-        "fit_core_equiv": weighted_core_equiv / total_examples,
-        "fit_cpu_pct": weighted_cpu_pct / total_examples,
+        "tempo_cpu_fit": tempo_cpu_pesato / total_examples,
+        "tempo_reale_fit": tempo_reale_pesato / total_examples,
+        "core_equivalenti_fit": core_equivalenti_pesati / total_examples,
+        "percentuale_cpu_fit": percentuale_cpu_pesata / total_examples,
+        "cpu_fit": tempo_cpu_pesato / total_examples,
+        "fit_wall_time": tempo_reale_pesato / total_examples,
+        "fit_core_equiv": core_equivalenti_pesati / total_examples,
+        "fit_cpu_pct": percentuale_cpu_pesata / total_examples,
     }
 
 

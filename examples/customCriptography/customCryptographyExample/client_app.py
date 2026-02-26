@@ -70,7 +70,7 @@ class FlowerClient(NumPyClient):
 
             # misurazione CPU
             start_cpu = self._cpu_time()
-            start_wall = time.perf_counter()
+            inizio_tempo_reale = time.perf_counter()
 
             results = train(
                 self.net,
@@ -82,11 +82,11 @@ class FlowerClient(NumPyClient):
             )
 
             end_cpu = self._cpu_time()
-            end_wall = time.perf_counter()
-            cpu_time = end_cpu - start_cpu
-            wall_time = end_wall - start_wall
-            cores_used_equivalent = cpu_time / wall_time if wall_time > 0 else 0.0
-            cpu_usage_pct = (cores_used_equivalent / self.num_cores) * 100
+            fine_tempo_reale = time.perf_counter()
+            tempo_cpu = end_cpu - start_cpu
+            tempo_reale = fine_tempo_reale - inizio_tempo_reale
+            core_equivalenti = tempo_cpu / tempo_reale if tempo_reale > 0 else 0.0
+            percentuale_cpu = (core_equivalenti / self.num_cores) * 100
             # cpu_logger.info(f"{cpu_time:.3f}", extra={"pid": os.getpid()})
             weights = get_weights(self.net)
 
@@ -100,49 +100,53 @@ class FlowerClient(NumPyClient):
             )
 
             cpu_line = (
-                "CPU per round | pid=%s | round=%s | cpu_time=%.3fs | wall_time=%.3fs "
-                "| core_equiv=%.2f | logical_cores=%s | cpu_pct=%.2f%%"
+                "CPU per round | pid=%s | round=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs "
+                "| core_equivalenti=%.2f | core_logici=%s | percentuale_cpu=%.2f%%"
             )
             logging.info(
                 cpu_line,
                 os.getpid(),
                 server_round,
-                cpu_time,
-                wall_time,
-                cores_used_equivalent,
+                tempo_cpu,
+                tempo_reale,
+                core_equivalenti,
                 self.num_cores,
-                cpu_usage_pct,
+                percentuale_cpu,
             )
             log(
                 logging.INFO,
                 cpu_line,
                 os.getpid(),
                 server_round,
-                cpu_time,
-                wall_time,
-                cores_used_equivalent,
+                tempo_cpu,
+                tempo_reale,
+                core_equivalenti,
                 self.num_cores,
-                cpu_usage_pct,
+                percentuale_cpu,
             )
             print(
                 cpu_line
                 % (
                     os.getpid(),
                     server_round,
-                    cpu_time,
-                    wall_time,
-                    cores_used_equivalent,
+                    tempo_cpu,
+                    tempo_reale,
+                    core_equivalenti,
                     self.num_cores,
-                    cpu_usage_pct,
+                    percentuale_cpu,
                 ),
                 flush=True,
             )
 
             return weights, len(self.trainloader.dataset), {
-                "cpu_fit": cpu_time,
-                "fit_wall_time": wall_time,
-                "fit_core_equiv": cores_used_equivalent,
-                "fit_cpu_pct": cpu_usage_pct,
+                "tempo_cpu_fit": tempo_cpu,
+                "cpu_fit": tempo_cpu,
+                "tempo_reale_fit": tempo_reale,
+                "fit_wall_time": tempo_reale,
+                "core_equivalenti_fit": core_equivalenti,
+                "fit_core_equiv": core_equivalenti,
+                "percentuale_cpu_fit": percentuale_cpu,
+                "fit_cpu_pct": percentuale_cpu,
                 "fit_round": server_round,
             }
         except Exception:
