@@ -1,4 +1,5 @@
 from flwr.common import Context, Metrics, ndarrays_to_parameters, parameters_to_ndarrays
+import logging
 from flwr.common.logger import log
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
@@ -26,6 +27,66 @@ def weighted_average(metrics):
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     return {"accuracy": sum(accuracies) / sum(examples)}
+
+
+
+
+def get_on_fit_config_fn():
+    """Return fit config with explicit round number for clients."""
+
+    def fit_config_fn(server_round: int) -> dict[str, Scalar]:
+        return {"current_round": server_round}
+
+    return fit_config_fn
+
+def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
+    """Aggregate and print per-client CPU metrics returned by fit()."""
+    if not metrics:
+        return {}
+
+    total_examples = sum(num_examples for num_examples, _ in metrics)
+    tempo_cpu_pesato = 0.0
+    tempo_reale_pesato = 0.0
+    core_equivalenti_pesati = 0.0
+    percentuale_cpu_pesata = 0.0
+
+    for idx, (num_examples, metric) in enumerate(metrics, start=1):
+        tempo_cpu = float(metric.get("tempo_cpu_fit", metric.get("cpu_fit", 0.0)))
+        tempo_reale = float(metric.get("tempo_reale_fit", metric.get("fit_wall_time", 0.0)))
+        core_equivalenti = float(metric.get("core_equivalenti_fit", metric.get("fit_core_equiv", 0.0)))
+        percentuale_cpu = float(metric.get("percentuale_cpu_fit", metric.get("fit_cpu_pct", 0.0)))
+        fit_round = metric.get("fit_round", "unknown")
+
+        tempo_cpu_pesato += tempo_cpu * num_examples
+        tempo_reale_pesato += tempo_reale * num_examples
+        core_equivalenti_pesati += core_equivalenti * num_examples
+        percentuale_cpu_pesata += percentuale_cpu * num_examples
+
+        log(
+            logging.INFO,
+            "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%%",
+            fit_round,
+            idx,
+            num_examples,
+            tempo_cpu,
+            tempo_reale,
+            core_equivalenti,
+            percentuale_cpu,
+        )
+
+    if total_examples == 0:
+        return {}
+
+    return {
+        "tempo_cpu_fit": tempo_cpu_pesato / total_examples,
+        "tempo_reale_fit": tempo_reale_pesato / total_examples,
+        "core_equivalenti_fit": core_equivalenti_pesati / total_examples,
+        "percentuale_cpu_fit": percentuale_cpu_pesata / total_examples,
+        "cpu_fit": tempo_cpu_pesato / total_examples,
+        "fit_wall_time": tempo_reale_pesato / total_examples,
+        "fit_core_equiv": core_equivalenti_pesati / total_examples,
+        "fit_cpu_pct": percentuale_cpu_pesata / total_examples,
+    }
 
 
 class FedAvgWithServerEval(FedAvg):
@@ -144,7 +205,9 @@ def server_fn(context: Context):
         min_available_clients=2,
         evaluate_fn=server_side,
         initial_parameters=parameters,
+        on_fit_config_fn=get_on_fit_config_fn(),
         evaluate_metrics_aggregation_fn=weighted_average,
+        fit_metrics_aggregation_fn=aggregate_fit_metrics,
         stop_criteria={"metric_ge": ("accuracy", ACCURACY),
         },
     )
