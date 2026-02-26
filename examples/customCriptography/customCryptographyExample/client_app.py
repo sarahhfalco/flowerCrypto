@@ -3,6 +3,8 @@ import logging
 import os
 import time
 
+from flwr.common.logger import log
+
 import numpy as np
 import psutil
 import torch
@@ -97,9 +99,12 @@ class FlowerClient(NumPyClient):
                 f"-> ~{packets} pacchetti TCP (MSS={MSS})"
             )
 
-            logging.info(
+            cpu_line = (
                 "CPU per round | pid=%s | round=%s | cpu_time=%.3fs | wall_time=%.3fs "
-                "| core_equiv=%.2f | logical_cores=%s | cpu_pct=%.2f%%",
+                "| core_equiv=%.2f | logical_cores=%s | cpu_pct=%.2f%%"
+            )
+            logging.info(
+                cpu_line,
                 os.getpid(),
                 server_round,
                 cpu_time,
@@ -107,6 +112,30 @@ class FlowerClient(NumPyClient):
                 cores_used_equivalent,
                 self.num_cores,
                 cpu_usage_pct,
+            )
+            log(
+                logging.INFO,
+                cpu_line,
+                os.getpid(),
+                server_round,
+                cpu_time,
+                wall_time,
+                cores_used_equivalent,
+                self.num_cores,
+                cpu_usage_pct,
+            )
+            print(
+                cpu_line
+                % (
+                    os.getpid(),
+                    server_round,
+                    cpu_time,
+                    wall_time,
+                    cores_used_equivalent,
+                    self.num_cores,
+                    cpu_usage_pct,
+                ),
+                flush=True,
             )
 
             return weights, len(self.trainloader.dataset), {
