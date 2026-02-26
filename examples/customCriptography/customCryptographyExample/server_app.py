@@ -29,6 +29,16 @@ def weighted_average(metrics):
     return {"accuracy": sum(accuracies) / sum(examples)}
 
 
+
+
+def get_on_fit_config_fn():
+    """Return fit config with explicit round number for clients."""
+
+    def fit_config_fn(server_round: int) -> dict[str, Scalar]:
+        return {"current_round": server_round}
+
+    return fit_config_fn
+
 def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
     """Aggregate and print per-client CPU metrics returned by fit()."""
     if not metrics:
@@ -191,6 +201,7 @@ def server_fn(context: Context):
         min_available_clients=2,
         evaluate_fn=server_side,
         initial_parameters=parameters,
+        on_fit_config_fn=get_on_fit_config_fn(),
         evaluate_metrics_aggregation_fn=weighted_average,
         fit_metrics_aggregation_fn=aggregate_fit_metrics,
         stop_criteria={"metric_ge": ("accuracy", ACCURACY),
