@@ -80,12 +80,15 @@ class FlowerClient(NumPyClient):
             ram_iniziale_bytes = self._ram_bytes()
             inizio_tempo_reale = time.perf_counter()
 
+            epoche_locali = int(config.get("local_epochs", config.get("local-epochs", self.local_epochs)))
+            learning_rate_round = float(config.get("learning_rate", config.get("learning-rate", self.lr)))
+
             results = train(
                 self.net,
                 self.trainloader,
                 self.valloader,
-                self.local_epochs,
-                self.lr,
+                epoche_locali,
+                learning_rate_round,
                 self.device,
             )
 
@@ -113,7 +116,7 @@ class FlowerClient(NumPyClient):
 
             cpu_line = (
                 "CPU per round | pid=%s | round=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs "
-                "| core_equivalenti=%.2f | core_logici=%s | percentuale_cpu=%.2f%%"
+                "| core_equivalenti=%.2f | core_logici=%s | percentuale_cpu=%.2f%% | epoche=%s | lr=%.5f"
             )
             log(
                 logging.INFO,
@@ -125,6 +128,8 @@ class FlowerClient(NumPyClient):
                 core_equivalenti,
                 self.num_cores,
                 percentuale_cpu,
+                epoche_locali,
+                learning_rate_round,
             )
 
             ram_line = (
@@ -151,6 +156,8 @@ class FlowerClient(NumPyClient):
                 "core_equivalenti_fit": core_equivalenti,
                 "percentuale_cpu_fit": percentuale_cpu,
                 "fit_round": server_round,
+                "epoche_locali_fit": epoche_locali,
+                "learning_rate_fit": learning_rate_round,
                 "ram_iniziale_mb_fit": ram_iniziale_mb,
                 "ram_finale_mb_fit": ram_finale_mb,
                 "delta_ram_mb_fit": delta_ram_mb,

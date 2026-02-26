@@ -31,11 +31,18 @@ def weighted_average(metrics):
 
 
 
-def get_on_fit_config_fn():
-    """Return fit config with explicit round number for clients."""
+def get_on_fit_config_fn(base_lr: float, local_epochs: int):
+    """Return fit config with explicit round and LR schedule for clients."""
 
     def fit_config_fn(server_round: int) -> dict[str, Scalar]:
-        return {"current_round": server_round}
+        # Step decay ogni 20 round per migliorare la convergenza
+        lr_round = base_lr * (0.5 ** ((server_round - 1) // 20))
+        lr_round = max(lr_round, base_lr * 0.05)
+        return {
+            "current_round": server_round,
+            "learning_rate": lr_round,
+            "local_epochs": local_epochs,
+        }
 
     return fit_config_fn
 
@@ -64,6 +71,8 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
         delta_ram_mb = float(metric.get("delta_ram_mb_fit", 0.0))
         percentuale_ram_sistema = float(metric.get("percentuale_ram_sistema_fit", 0.0))
         fit_round = metric.get("fit_round", "unknown")
+        epoche_locali = metric.get("epoche_locali_fit", "n/a")
+        learning_rate_fit = float(metric.get("learning_rate_fit", 0.0))
 
         tempo_cpu_pesato += tempo_cpu * num_examples
         tempo_reale_pesato += tempo_reale * num_examples
@@ -76,7 +85,7 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
 
         log(
             logging.INFO,
-            "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%% | ram_ini=%.1fMB | ram_fin=%.1fMB | delta_ram=%.1fMB | ram_sistema=%.2f%%",
+            "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%% | ram_ini=%.1fMB | ram_fin=%.1fMB | delta_ram=%.1fMB | ram_sistema=%.2f%% | epoche=%s | lr=%.5f",
             fit_round,
             idx,
             num_examples,
@@ -88,6 +97,8 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
             ram_finale_mb,
             delta_ram_mb,
             percentuale_ram_sistema,
+            epoche_locali,
+            learning_rate_fit,
         )
 
     if total_examples == 0:
@@ -221,7 +232,10 @@ def server_fn(context: Context):
         min_available_clients=2,
         evaluate_fn=server_side,
         initial_parameters=parameters,
-        on_fit_config_fn=get_on_fit_config_fn(),
+        on_fit_config_fn=get_on_fit_config_fn(
+            base_lr=float(context.run_config["learning-rate"]),
+            local_epochs=int(context.run_config["local-epochs"]),
+        ),
         evaluate_metrics_aggregation_fn=weighted_average,
         fit_metrics_aggregation_fn=aggregate_fit_metrics,
         stop_criteria={"metric_ge": ("accuracy", ACCURACY),
