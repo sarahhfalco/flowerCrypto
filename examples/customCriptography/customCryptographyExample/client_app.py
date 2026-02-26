@@ -56,6 +56,13 @@ class FlowerClient(NumPyClient):
         t = self.process.cpu_times()
         return t.user + t.system
 
+    def _ram_bytes(self):
+        return self.process.memory_info().rss
+
+    @staticmethod
+    def _bytes_to_mb(value_bytes):
+        return value_bytes / (1024 * 1024)
+
     @staticmethod
     def _extract_round(config):
         for key in ("server_round", "server-round", "current_round", "round"):
@@ -68,8 +75,9 @@ class FlowerClient(NumPyClient):
             set_weights(self.net, parameters)
             server_round = self._extract_round(config)
 
-            # misurazione CPU
+            # misurazione CPU/RAM
             start_cpu = self._cpu_time()
+            ram_iniziale_bytes = self._ram_bytes()
             inizio_tempo_reale = time.perf_counter()
 
             results = train(
@@ -87,6 +95,10 @@ class FlowerClient(NumPyClient):
             tempo_reale = fine_tempo_reale - inizio_tempo_reale
             core_equivalenti = tempo_cpu / tempo_reale if tempo_reale > 0 else 0.0
             percentuale_cpu = (core_equivalenti / self.num_cores) * 100
+            ram_finale_bytes = self._ram_bytes()
+            delta_ram_bytes = ram_finale_bytes - ram_iniziale_bytes
+            ram_totale_sistema_bytes = psutil.virtual_memory().total
+            percentuale_ram_sistema = (ram_finale_bytes / ram_totale_sistema_bytes) * 100
             # cpu_logger.info(f"{cpu_time:.3f}", extra={"pid": os.getpid()})
             weights = get_weights(self.net)
 
@@ -138,6 +150,45 @@ class FlowerClient(NumPyClient):
                 flush=True,
             )
 
+            ram_line = (
+                "RAM per round | pid=%s | round=%s | ram_iniziale=%.1fMB | ram_finale=%.1fMB "
+                "| delta_ram=%.1fMB | ram_sistema_pct=%.2f%%"
+            )
+            ram_iniziale_mb = self._bytes_to_mb(ram_iniziale_bytes)
+            ram_finale_mb = self._bytes_to_mb(ram_finale_bytes)
+            delta_ram_mb = self._bytes_to_mb(delta_ram_bytes)
+            logging.info(
+                ram_line,
+                os.getpid(),
+                server_round,
+                ram_iniziale_mb,
+                ram_finale_mb,
+                delta_ram_mb,
+                percentuale_ram_sistema,
+            )
+            log(
+                logging.INFO,
+                ram_line,
+                os.getpid(),
+                server_round,
+                ram_iniziale_mb,
+                ram_finale_mb,
+                delta_ram_mb,
+                percentuale_ram_sistema,
+            )
+            print(
+                ram_line
+                % (
+                    os.getpid(),
+                    server_round,
+                    ram_iniziale_mb,
+                    ram_finale_mb,
+                    delta_ram_mb,
+                    percentuale_ram_sistema,
+                ),
+                flush=True,
+            )
+
             return weights, len(self.trainloader.dataset), {
                 "tempo_cpu_fit": tempo_cpu,
                 "cpu_fit": tempo_cpu,
@@ -148,6 +199,10 @@ class FlowerClient(NumPyClient):
                 "percentuale_cpu_fit": percentuale_cpu,
                 "fit_cpu_pct": percentuale_cpu,
                 "fit_round": server_round,
+                "ram_iniziale_mb_fit": ram_iniziale_mb,
+                "ram_finale_mb_fit": ram_finale_mb,
+                "delta_ram_mb_fit": delta_ram_mb,
+                "percentuale_ram_sistema_fit": percentuale_ram_sistema,
             }
         except Exception:
             logging.exception("ERRORE in fit() sul client, il client sta crashando!")
