@@ -1,6 +1,9 @@
 """authexample: An authenticated Flower / PyTorch app."""
 import logging
 import os
+import time
+
+from flwr.common.logger import log
 
 import numpy as np
 import psutil
@@ -46,17 +49,28 @@ class FlowerClient(NumPyClient):
         self.lr = learning_rate
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.process = psutil.Process(os.getpid())
+        self.num_cores = psutil.cpu_count(logical=True) or 1
 
 
     def _cpu_time(self):
         t = self.process.cpu_times()
         return t.user + t.system
+
+    @staticmethod
+    def _extract_round(config):
+        for key in ("server_round", "server-round", "current_round", "round"):
+            if key in config:
+                return config[key]
+        return "unknown"
+
     def fit(self, parameters, config):
         try:
             set_weights(self.net, parameters)
+            server_round = self._extract_round(config)
 
             # misurazione CPU
             start_cpu = self._cpu_time()
+            start_wall = time.perf_counter()
 
             results = train(
                 self.net,
@@ -68,7 +82,11 @@ class FlowerClient(NumPyClient):
             )
 
             end_cpu = self._cpu_time()
+            end_wall = time.perf_counter()
             cpu_time = end_cpu - start_cpu
+            wall_time = end_wall - start_wall
+            cores_used_equivalent = cpu_time / wall_time if wall_time > 0 else 0.0
+            cpu_usage_pct = (cores_used_equivalent / self.num_cores) * 100
             # cpu_logger.info(f"{cpu_time:.3f}", extra={"pid": os.getpid()})
             weights = get_weights(self.net)
 
@@ -81,7 +99,52 @@ class FlowerClient(NumPyClient):
                 f"-> ~{packets} pacchetti TCP (MSS={MSS})"
             )
 
-            return weights, len(self.trainloader.dataset), {"cpu_fit": cpu_time}
+            cpu_line = (
+                "CPU per round | pid=%s | round=%s | cpu_time=%.3fs | wall_time=%.3fs "
+                "| core_equiv=%.2f | logical_cores=%s | cpu_pct=%.2f%%"
+            )
+            logging.info(
+                cpu_line,
+                os.getpid(),
+                server_round,
+                cpu_time,
+                wall_time,
+                cores_used_equivalent,
+                self.num_cores,
+                cpu_usage_pct,
+            )
+            log(
+                logging.INFO,
+                cpu_line,
+                os.getpid(),
+                server_round,
+                cpu_time,
+                wall_time,
+                cores_used_equivalent,
+                self.num_cores,
+                cpu_usage_pct,
+            )
+            print(
+                cpu_line
+                % (
+                    os.getpid(),
+                    server_round,
+                    cpu_time,
+                    wall_time,
+                    cores_used_equivalent,
+                    self.num_cores,
+                    cpu_usage_pct,
+                ),
+                flush=True,
+            )
+
+            return weights, len(self.trainloader.dataset), {
+                "cpu_fit": cpu_time,
+                "fit_wall_time": wall_time,
+                "fit_core_equiv": cores_used_equivalent,
+                "fit_cpu_pct": cpu_usage_pct,
+                "fit_round": server_round,
+            }
         except Exception:
             logging.exception("ERRORE in fit() sul client, il client sta crashando!")
             raise
