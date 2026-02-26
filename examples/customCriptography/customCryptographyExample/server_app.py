@@ -55,10 +55,10 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
     percentuale_ram_sistema_pesata = 0.0
 
     for idx, (num_examples, metric) in enumerate(metrics, start=1):
-        tempo_cpu = float(metric.get("tempo_cpu_fit", metric.get("cpu_fit", 0.0)))
-        tempo_reale = float(metric.get("tempo_reale_fit", metric.get("fit_wall_time", 0.0)))
-        core_equivalenti = float(metric.get("core_equivalenti_fit", metric.get("fit_core_equiv", 0.0)))
-        percentuale_cpu = float(metric.get("percentuale_cpu_fit", metric.get("fit_cpu_pct", 0.0)))
+        tempo_cpu = float(metric.get("tempo_cpu_fit", 0.0))
+        tempo_reale = float(metric.get("tempo_reale_fit", 0.0))
+        core_equivalenti = float(metric.get("core_equivalenti_fit", 0.0))
+        percentuale_cpu = float(metric.get("percentuale_cpu_fit", 0.0))
         ram_iniziale_mb = float(metric.get("ram_iniziale_mb_fit", 0.0))
         ram_finale_mb = float(metric.get("ram_finale_mb_fit", 0.0))
         delta_ram_mb = float(metric.get("delta_ram_mb_fit", 0.0))
@@ -98,10 +98,6 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
         "tempo_reale_fit": tempo_reale_pesato / total_examples,
         "core_equivalenti_fit": core_equivalenti_pesati / total_examples,
         "percentuale_cpu_fit": percentuale_cpu_pesata / total_examples,
-        "cpu_fit": tempo_cpu_pesato / total_examples,
-        "fit_wall_time": tempo_reale_pesato / total_examples,
-        "fit_core_equiv": core_equivalenti_pesati / total_examples,
-        "fit_cpu_pct": percentuale_cpu_pesata / total_examples,
         "ram_iniziale_mb_fit": ram_iniziale_mb_pesata / total_examples,
         "ram_finale_mb_fit": ram_finale_mb_pesata / total_examples,
         "delta_ram_mb_fit": delta_ram_mb_pesata / total_examples,

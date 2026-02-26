@@ -115,16 +115,6 @@ class FlowerClient(NumPyClient):
                 "CPU per round | pid=%s | round=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs "
                 "| core_equivalenti=%.2f | core_logici=%s | percentuale_cpu=%.2f%%"
             )
-            logging.info(
-                cpu_line,
-                os.getpid(),
-                server_round,
-                tempo_cpu,
-                tempo_reale,
-                core_equivalenti,
-                self.num_cores,
-                percentuale_cpu,
-            )
             log(
                 logging.INFO,
                 cpu_line,
@@ -135,19 +125,6 @@ class FlowerClient(NumPyClient):
                 core_equivalenti,
                 self.num_cores,
                 percentuale_cpu,
-            )
-            print(
-                cpu_line
-                % (
-                    os.getpid(),
-                    server_round,
-                    tempo_cpu,
-                    tempo_reale,
-                    core_equivalenti,
-                    self.num_cores,
-                    percentuale_cpu,
-                ),
-                flush=True,
             )
 
             ram_line = (
@@ -157,15 +134,6 @@ class FlowerClient(NumPyClient):
             ram_iniziale_mb = self._bytes_to_mb(ram_iniziale_bytes)
             ram_finale_mb = self._bytes_to_mb(ram_finale_bytes)
             delta_ram_mb = self._bytes_to_mb(delta_ram_bytes)
-            logging.info(
-                ram_line,
-                os.getpid(),
-                server_round,
-                ram_iniziale_mb,
-                ram_finale_mb,
-                delta_ram_mb,
-                percentuale_ram_sistema,
-            )
             log(
                 logging.INFO,
                 ram_line,
@@ -176,28 +144,12 @@ class FlowerClient(NumPyClient):
                 delta_ram_mb,
                 percentuale_ram_sistema,
             )
-            print(
-                ram_line
-                % (
-                    os.getpid(),
-                    server_round,
-                    ram_iniziale_mb,
-                    ram_finale_mb,
-                    delta_ram_mb,
-                    percentuale_ram_sistema,
-                ),
-                flush=True,
-            )
 
             return weights, len(self.trainloader.dataset), {
                 "tempo_cpu_fit": tempo_cpu,
-                "cpu_fit": tempo_cpu,
                 "tempo_reale_fit": tempo_reale,
-                "fit_wall_time": tempo_reale,
                 "core_equivalenti_fit": core_equivalenti,
-                "fit_core_equiv": core_equivalenti,
                 "percentuale_cpu_fit": percentuale_cpu,
-                "fit_cpu_pct": percentuale_cpu,
                 "fit_round": server_round,
                 "ram_iniziale_mb_fit": ram_iniziale_mb,
                 "ram_finale_mb_fit": ram_finale_mb,
