@@ -1,5 +1,6 @@
 from flwr.common import Context, Metrics, ndarrays_to_parameters, parameters_to_ndarrays
 import logging
+import csv
 from flwr.common.logger import log
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
@@ -8,6 +9,7 @@ from flwr.common.crypto.config_cripto import NET, ACCURACY
 from flwr.common import NDArrays, Scalar
 from typing import  OrderedDict
 from collections import OrderedDict
+from pathlib import Path
 import torch
 from flwr.common import Context, NDArrays, Scalar, parameters_to_ndarrays
 
@@ -18,6 +20,68 @@ from flwr.common.crypto.config_cripto import NET,EVALUATION_SIDE  # o "resnet18"
 
 from flwr.server.history import History
 from flwr.common.crypto.config_cripto import ACCURACY
+
+
+
+CLIENT_METRICS_CSV = Path("logs/client_metriche_round.csv")
+
+
+def _append_client_metric_row(
+    round_id,
+    client_idx,
+    num_examples,
+    tempo_cpu,
+    tempo_reale,
+    core_equivalenti,
+    percentuale_cpu,
+    ram_iniziale_mb,
+    ram_finale_mb,
+    delta_ram_mb,
+    percentuale_ram_sistema,
+    epoche_locali,
+    learning_rate_fit,
+):
+    CLIENT_METRICS_CSV.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not CLIENT_METRICS_CSV.exists()
+
+    with CLIENT_METRICS_CSV.open("a", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        if write_header:
+            writer.writerow(
+                [
+                    "round",
+                    "client_idx",
+                    "esempi",
+                    "tempo_cpu_fit",
+                    "tempo_reale_fit",
+                    "core_equivalenti_fit",
+                    "percentuale_cpu_fit",
+                    "ram_iniziale_mb_fit",
+                    "ram_finale_mb_fit",
+                    "delta_ram_mb_fit",
+                    "percentuale_ram_sistema_fit",
+                    "epoche_locali_fit",
+                    "learning_rate_fit",
+                ]
+            )
+
+        writer.writerow(
+            [
+                round_id,
+                client_idx,
+                num_examples,
+                f"{tempo_cpu:.6f}",
+                f"{tempo_reale:.6f}",
+                f"{core_equivalenti:.6f}",
+                f"{percentuale_cpu:.6f}",
+                f"{ram_iniziale_mb:.6f}",
+                f"{ram_finale_mb:.6f}",
+                f"{delta_ram_mb:.6f}",
+                f"{percentuale_ram_sistema:.6f}",
+                epoche_locali,
+                f"{learning_rate_fit:.8f}",
+            ]
+        )
 
 
 # ------------------------------
@@ -86,6 +150,22 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
         log(
             logging.INFO,
             "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%% | ram_ini=%.1fMB | ram_fin=%.1fMB | delta_ram=%.1fMB | ram_sistema=%.2f%% | epoche=%s | lr=%.5f",
+            fit_round,
+            idx,
+            num_examples,
+            tempo_cpu,
+            tempo_reale,
+            core_equivalenti,
+            percentuale_cpu,
+            ram_iniziale_mb,
+            ram_finale_mb,
+            delta_ram_mb,
+            percentuale_ram_sistema,
+            epoche_locali,
+            learning_rate_fit,
+        )
+
+        _append_client_metric_row(
             fit_round,
             idx,
             num_examples,
