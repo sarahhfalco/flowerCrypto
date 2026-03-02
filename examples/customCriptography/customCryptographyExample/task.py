@@ -136,6 +136,15 @@ def get_model(model_name: str, num_classes=10, pretrained=True):
     elif model_name == "mobilenet_v3_small":
         weights = MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
         model = mobilenet_v3_small(weights=weights)
+        # 🔧 adattamento per CIFAR (32x32): stem meno aggressivo
+        model.features[0][0] = nn.Conv2d(
+            3,
+            16,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
         model.classifier[3] = nn.Linear(model.classifier[3].in_features, num_classes)
         return model
     else:
