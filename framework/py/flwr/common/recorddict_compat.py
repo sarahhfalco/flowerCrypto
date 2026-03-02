@@ -107,7 +107,9 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
             start_decrypt = time.perf_counter()
             data = decrypt(data, ENCRYPTION_METHOD)
             end_decrypt = time.perf_counter()
-            total_crypto_time += (end_decrypt - start_decrypt)
+            decrypt_elapsed = end_decrypt - start_decrypt
+            total_crypto_time += decrypt_elapsed
+            log_file.add_decrypt_time(decrypt_elapsed)
 
         # aggiungi il tensor
         parameters.tensors.append(data)
@@ -170,7 +172,9 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             start_encrypt = time.perf_counter()
             dataR = encrypt(dataR, ENCRYPTION_METHOD)
             end_encrypt = time.perf_counter()
-            tot_crypto_time += (end_encrypt - start_encrypt)
+            encrypt_elapsed = end_encrypt - start_encrypt
+            tot_crypto_time += encrypt_elapsed
+            log_file.add_encrypt_time(encrypt_elapsed)
             log_file.add_overhead(
                 ENCRYPTION_METHOD,
                 "crypto",

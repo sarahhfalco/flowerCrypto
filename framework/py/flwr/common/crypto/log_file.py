@@ -8,6 +8,8 @@ CSV_INITIALIZED = False
 TOTAL_CRYPTO_TIME = 0.0
 TOTAL_SERIAL_TIME = 0.0
 TOTAL_AUTH_TIME = 0.0
+TOTAL_ENCRYPT_TIME = 0.0
+TOTAL_DECRYPT_TIME = 0.0
 TOTAL_OVERHEAD_BYTES = 0
 TOTAL_PLAINTEXT_BYTES = 0
 OVERHEAD_BY_METHOD: Dict[str, int] = {}
@@ -19,12 +21,15 @@ OVERHEAD_COUNT_BY_CATEGORY: Dict[str, int] = {}
 def reset_crypto_totals() -> None:
     """Reset accumulated crypto/serialization totals."""
     global TOTAL_CRYPTO_TIME, TOTAL_SERIAL_TIME, TOTAL_AUTH_TIME
+    global TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
     global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES
     global OVERHEAD_BY_METHOD, OVERHEAD_COUNT_BY_METHOD
     global OVERHEAD_BY_CATEGORY, OVERHEAD_COUNT_BY_CATEGORY
     TOTAL_CRYPTO_TIME = 0.0
     TOTAL_SERIAL_TIME = 0.0
     TOTAL_AUTH_TIME = 0.0
+    TOTAL_ENCRYPT_TIME = 0.0
+    TOTAL_DECRYPT_TIME = 0.0
     TOTAL_OVERHEAD_BYTES = 0
     TOTAL_PLAINTEXT_BYTES = 0
     OVERHEAD_BY_METHOD = {}
@@ -45,6 +50,24 @@ def add_auth_time(auth_time: float) -> None:
     global TOTAL_AUTH_TIME
     TOTAL_AUTH_TIME += auth_time
 
+
+
+
+def add_encrypt_time(encrypt_time: float) -> None:
+    """Accumulate encryption time for summary reporting."""
+    global TOTAL_ENCRYPT_TIME
+    TOTAL_ENCRYPT_TIME += encrypt_time
+
+
+def add_decrypt_time(decrypt_time: float) -> None:
+    """Accumulate decryption time for summary reporting."""
+    global TOTAL_DECRYPT_TIME
+    TOTAL_DECRYPT_TIME += decrypt_time
+
+
+def get_encrypt_decrypt_totals() -> tuple[float, float]:
+    """Return accumulated encryption/decryption totals."""
+    return TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
 
 def get_crypto_totals() -> tuple[float, float]:
     """Return accumulated crypto and serialization totals."""
@@ -187,6 +210,8 @@ def build_round_time_report() -> List[str]:
     total_auth_time = 0.0
     total_crypto_cumulative = 0.0
     total_auth_cumulative = 0.0
+    total_encrypt_time = 0.0
+    total_decrypt_time = 0.0
 
     for summary in ROUND_SUMMARIES:
         round_time = summary["round_time"]
@@ -195,6 +220,8 @@ def build_round_time_report() -> List[str]:
         auth_time = summary.get("auth_time", 0.0)
         crypto_cumulative = summary.get("crypto_cumulative", crypto_time)
         auth_cumulative = summary.get("auth_cumulative", auth_time)
+        encrypt_time = summary.get("encrypt_time", 0.0)
+        decrypt_time = summary.get("decrypt_time", 0.0)
         parallel_factor = summary.get("parallel_factor")
         parallel_fit = summary.get("parallel_fit")
         parallel_eval = summary.get("parallel_eval")
@@ -215,6 +242,7 @@ def build_round_time_report() -> List[str]:
             "Round {round_num}: totale={round_time:.2f}s | "
             "crypto={crypto_time:.2f}s ({impact:.2f}%) | "
             "auth={auth_time:.2f}s ({auth_impact:.2f}%) | "
+            "enc={encrypt_time:.2f}s | dec={decrypt_time:.2f}s | "
             "crypto_cum={crypto_cumulative:.2f}s | auth_cum={auth_cumulative:.2f}s | "
             "senza_critto={without_crypto:.2f}s{parallel_note}".format(
                 round_num=int(summary["round"]),
@@ -223,6 +251,8 @@ def build_round_time_report() -> List[str]:
                 impact=impact,
                 auth_time=auth_time,
                 auth_impact=auth_impact,
+                encrypt_time=encrypt_time,
+                decrypt_time=decrypt_time,
                 crypto_cumulative=crypto_cumulative,
                 auth_cumulative=auth_cumulative,
                 without_crypto=without_crypto,
@@ -235,6 +265,8 @@ def build_round_time_report() -> List[str]:
         total_auth_time += auth_time
         total_crypto_cumulative += crypto_cumulative
         total_auth_cumulative += auth_cumulative
+        total_encrypt_time += encrypt_time
+        total_decrypt_time += decrypt_time
 
     total_impact = (
         (total_crypto_time / total_round_time * 100.0)
@@ -261,6 +293,13 @@ def build_round_time_report() -> List[str]:
             impact=total_auth_impact,
         )
     )
+    lines.append(
+        "Totale cifratura (round): {total_encrypt:.2f}s | totale decifratura (round): {total_decrypt:.2f}s".format(
+            total_encrypt=total_encrypt_time,
+            total_decrypt=total_decrypt_time,
+        )
+    )
+
     if total_crypto_cumulative != total_crypto_time:
         lines.append(
             "Totale critto cumulativo: {total_crypto:.2f}s".format(
