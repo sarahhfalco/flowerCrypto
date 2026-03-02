@@ -150,6 +150,7 @@ class Server:
         # Run federated learning for num_rounds
         prev_crypto_total, _ = log_file.get_crypto_totals()
         prev_auth_total = log_file.get_auth_totals()
+        prev_encrypt_total, prev_decrypt_total = log_file.get_encrypt_decrypt_totals()
 
         for current_round in range(1, num_rounds + 1):
             if getattr(self.strategy, "stop_triggered", False):
