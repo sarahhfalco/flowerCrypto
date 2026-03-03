@@ -36,8 +36,8 @@ if __name__ == "__main__":
         "num_partitions",
         type=int,
         nargs="?",
-        default=2,
-        help="Number of partitions to create (default: 2)",
+        default=20,
+        help="Number of partitions to create (default: 20)",
     )
 
     # Parse the arguments
