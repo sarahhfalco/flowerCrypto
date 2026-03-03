@@ -38,6 +38,7 @@ from .crypto.config_cripto import (
     ENCRYPTION_ENABLED,
     INTEGRITY_ENABLED,
     INTEGRITY_METHOD,
+    VERBOSE_CRYPTO_STATUS,
 )
 from .crypto import log_file
 from .crypto.log_file import log_time
@@ -124,21 +125,22 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     auth_impact = (total_auth_time / total_time * 100.0) if total_time > 0 else 0.0
     log_file.add_crypto_time(total_crypto_time, total_deser_time)
     log_file.add_auth_time(total_auth_time)
-    log_time(
-        "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
-        "DESERIALIZE: %.5f s | CRYPTO: %.5f s | AUTH: %.5f s | TOTAL: %.5f s | "
-        "IMPACT: %.2f%% | AUTH_IMPACT: %.2f%%",
-        ENCRYPTION_ENABLED,
-        ENCRYPTION_METHOD,
-        AUTH_ENABLED,
-        AUTH_METHOD,
-        total_deser_time,
-        total_crypto_time,
-        total_auth_time,
-        total_time,
-        crypto_impact,
-        auth_impact,
-    )
+    if VERBOSE_CRYPTO_STATUS:
+        log_time(
+            "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
+            "DESERIALIZE: %.5f s | CRYPTO: %.5f s | AUTH: %.5f s | TOTAL: %.5f s | "
+            "IMPACT: %.2f%% | AUTH_IMPACT: %.2f%%",
+            ENCRYPTION_ENABLED,
+            ENCRYPTION_METHOD,
+            AUTH_ENABLED,
+            AUTH_METHOD,
+            total_deser_time,
+            total_crypto_time,
+            total_auth_time,
+            total_time,
+            crypto_impact,
+            auth_impact,
+        )
 
     return parameters
 
@@ -226,21 +228,22 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     auth_impact = (tot_auth_time / total_time * 100.0) if total_time > 0 else 0.0
     log_file.add_crypto_time(tot_crypto_time, tot_serial_time)
     log_file.add_auth_time(tot_auth_time)
-    log_time(
-        "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
-        "SERIALIZE: %.5f s | CRYPTO: %.5f s | AUTH: %.5f s | TOTAL: %.5f s | "
-        "IMPACT: %.2f%% | AUTH_IMPACT: %.2f%%",
-        ENCRYPTION_ENABLED,
-        ENCRYPTION_METHOD,
-        AUTH_ENABLED,
-        AUTH_METHOD,
-        tot_serial_time,
-        tot_crypto_time,
-        tot_auth_time,
-        total_time,
-        crypto_impact,
-        auth_impact,
-    )
+    if VERBOSE_CRYPTO_STATUS:
+        log_time(
+            "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
+            "SERIALIZE: %.5f s | CRYPTO: %.5f s | AUTH: %.5f s | TOTAL: %.5f s | "
+            "IMPACT: %.2f%% | AUTH_IMPACT: %.2f%%",
+            ENCRYPTION_ENABLED,
+            ENCRYPTION_METHOD,
+            AUTH_ENABLED,
+            AUTH_METHOD,
+            tot_serial_time,
+            tot_crypto_time,
+            tot_auth_time,
+            total_time,
+            crypto_impact,
+            auth_impact,
+        )
 
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 

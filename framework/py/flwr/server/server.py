@@ -192,7 +192,6 @@ class Server:
                 history.add_metrics_centralized(
                     server_round=current_round, metrics=metrics_cen
                 )
-                print("metrics_cen",metrics_cen )
                 if "accuracy" in metrics_cen:
                     log_time("Round %s Accuracy (centralized): %.4f", current_round, metrics_cen["accuracy"])
 
