@@ -71,6 +71,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
 
     total_deser_time = 0.0   # tempo per costruire gli oggetti Parameters (no decrypt)
     total_crypto_time = 0.0  # tempo crypto (cifratura/integrità)
+    total_decrypt_time = 0.0
     total_auth_time = 0.0
 
     # Iteriamo direttamente sulle chiavi senza creare copie costose
@@ -107,7 +108,9 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
             start_decrypt = time.perf_counter()
             data = decrypt(data, ENCRYPTION_METHOD)
             end_decrypt = time.perf_counter()
-            total_crypto_time += (end_decrypt - start_decrypt)
+            decrypt_elapsed = end_decrypt - start_decrypt
+            total_crypto_time += decrypt_elapsed
+            total_decrypt_time += decrypt_elapsed
 
         # aggiungi il tensor
         parameters.tensors.append(data)
@@ -121,6 +124,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     crypto_impact = (total_crypto_time / total_time * 100.0) if total_time > 0 else 0.0
     auth_impact = (total_auth_time / total_time * 100.0) if total_time > 0 else 0.0
     log_file.add_crypto_time(total_crypto_time, total_deser_time)
+    log_file.add_encrypt_decrypt_time(0.0, total_decrypt_time)
     log_file.add_auth_time(total_auth_time)
     log_time(
         "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
@@ -149,6 +153,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     # Tempi separati
     tot_serial_time = 0.0
     tot_crypto_time = 0.0
+    tot_encrypt_time = 0.0
     tot_auth_time = 0.0
 
     for idx in range(num_arrays):
@@ -170,7 +175,9 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             start_encrypt = time.perf_counter()
             dataR = encrypt(dataR, ENCRYPTION_METHOD)
             end_encrypt = time.perf_counter()
-            tot_crypto_time += (end_encrypt - start_encrypt)
+            encrypt_elapsed = end_encrypt - start_encrypt
+            tot_crypto_time += encrypt_elapsed
+            tot_encrypt_time += encrypt_elapsed
             log_file.add_overhead(
                 ENCRYPTION_METHOD,
                 "crypto",
@@ -221,6 +228,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     crypto_impact = (tot_crypto_time / total_time * 100.0) if total_time > 0 else 0.0
     auth_impact = (tot_auth_time / total_time * 100.0) if total_time > 0 else 0.0
     log_file.add_crypto_time(tot_crypto_time, tot_serial_time)
+    log_file.add_encrypt_decrypt_time(tot_encrypt_time, 0.0)
     log_file.add_auth_time(tot_auth_time)
     log_time(
         "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
