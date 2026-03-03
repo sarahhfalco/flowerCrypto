@@ -128,6 +128,11 @@ def configure():
                                  EVALUATION_OPTIONS,
                                  existing.get('EVALUATION_SIDE', "server"))
 
+    VERBOSE_CRYPTO_STATUS = ask_bool(
+        "Abilitare log crypto verbosi?",
+        existing.get('VERBOSE_CRYPTO_STATUS', False),
+    )
+
     # Salvataggio config
     with open(CONFIG_FILE, "w") as f:
         f.write(f"ENCRYPTION_ENABLED = {ENCRYPTION_ENABLED}\n")
@@ -141,6 +146,7 @@ def configure():
         f.write(f"ACCURACY = {ACCURACY}\n")
         f.write(f"NUM_CLIENTS = {NUM_CLIENTS}\n")
         f.write(f"EVALUATION_SIDE = '{EVALUATION_SIDE}'\n")
+        f.write(f"VERBOSE_CRYPTO_STATUS = {VERBOSE_CRYPTO_STATUS}\n")
 
     print(f"\nConfigurazione salvata in {CONFIG_FILE}")
 
