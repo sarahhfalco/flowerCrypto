@@ -125,17 +125,11 @@ def get_model(model_name: str, num_classes=10, pretrained=True):
     elif model_name == "resnet18":
         weights = ResNet18_Weights.DEFAULT if pretrained else None
         model = resnet18(weights=weights)
-        # 🔧 adattamento per CIFAR (32x32)
-        model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        model.maxpool = nn.Identity()  # rimuove maxpool iniziale
         model.fc = nn.Linear(model.fc.in_features, num_classes)
         return model
     elif model_name == "resnet34":
         weights = ResNet34_Weights.DEFAULT if pretrained else None
         model = resnet34(weights=weights)
-        # 🔧 adattamento per CIFAR (32x32)
-        model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        model.maxpool = nn.Identity()  # rimuove maxpool iniziale
         model.fc = nn.Linear(model.fc.in_features, num_classes)
         return model
     elif model_name == "mobilenet_v3_small":
