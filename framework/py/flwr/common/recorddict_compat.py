@@ -40,6 +40,9 @@ from .crypto.config_cripto import (
     INTEGRITY_METHOD,
     VERBOSE_CRYPTO_STATUS,
 )
+from .crypto import config_cripto as _config_cripto
+
+VERBOSE_CRYPTO_STATUS = getattr(_config_cripto, "VERBOSE_CRYPTO_STATUS", False)
 from .crypto import log_file
 from .crypto.log_file import log_time
 from .typing import (
