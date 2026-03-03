@@ -183,6 +183,10 @@ class FedAvgWithServerEval(FedAvg):
             return aggregated
 
         try:
+            if SERVER_EVAL_EVERY > 1 and server_round % SERVER_EVAL_EVERY != 0:
+                print(f"[Round {server_round}] Skip server eval (valutazione ogni {SERVER_EVAL_EVERY} round).")
+                return aggregated
+
             print(f"\n🔹 Esecuzione valutazione server-side dopo round {server_round}...")
             result = self.evaluate_fn(server_round, parameters)
 
