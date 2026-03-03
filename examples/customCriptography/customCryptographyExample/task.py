@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from datasets import load_from_disk
-from torchvision.transforms import Compose, Normalize, ToTensor, Resize
+from torchvision.transforms import Compose, Normalize, ToTensor, Resize, RandomCrop, RandomHorizontalFlip
 from torchvision.models import (
     resnet18,
     resnet34,
@@ -177,32 +177,51 @@ def set_weights(net, parameters):
 # DATA
 # ----------------------
 def load_data_from_disk(path: str, batch_size: int, resize=None):
-    """Carica il dataset dal disco e applica trasformazioni."""
+    """Carica il dataset dal disco con trasformazioni separate train/test."""
     partition_train_test = load_from_disk(path)
 
-    transforms_list = []
+    train_tfms = []
+    eval_tfms = []
     if resize is not None:
-        transforms_list.append(Resize(resize))
-    #transforms_list.extend([ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    transforms_list.extend([
-        ToTensor(),
-        Normalize(mean=[0.4914, 0.4822, 0.4465],
-                  std=[0.2470, 0.2435, 0.2616])
-    ])
-    pytorch_transforms = Compose(transforms_list)
+        train_tfms.append(Resize(resize))
+        eval_tfms.append(Resize(resize))
 
-    def apply_transforms(batch):
-        batch["img"] = [pytorch_transforms(img) for img in batch["img"]]
+    train_tfms.extend([
+        RandomCrop(32, padding=4),
+        RandomHorizontalFlip(),
+        ToTensor(),
+        Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616]),
+    ])
+    eval_tfms.extend([
+        ToTensor(),
+        Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616]),
+    ])
+
+    train_transforms = Compose(train_tfms)
+    eval_transforms = Compose(eval_tfms)
+
+    def apply_train_transforms(batch):
+        batch["img"] = [train_transforms(img) for img in batch["img"]]
         return batch
+
+    def apply_eval_transforms(batch):
+        batch["img"] = [eval_transforms(img) for img in batch["img"]]
+        return batch
+
+    train_partition = partition_train_test["train"].with_transform(apply_train_transforms)
+    test_partition = partition_train_test["test"].with_transform(apply_eval_transforms)
+
     g = torch.Generator()
     g.manual_seed(SEED)
 
-    partition_train_test = partition_train_test.with_transform(apply_transforms)
-
     trainloader = DataLoader(
-        partition_train_test["train"], batch_size=batch_size, shuffle=True, generator=g, num_workers=0,
+        train_partition,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=g,
+        num_workers=0,
     )
-    testloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
+    testloader = DataLoader(test_partition, batch_size=batch_size)
     return trainloader, testloader
 
 

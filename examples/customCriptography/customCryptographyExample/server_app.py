@@ -1,6 +1,7 @@
 from flwr.common import Context, Metrics, ndarrays_to_parameters, parameters_to_ndarrays
 import logging
 import csv
+import math
 from flwr.common.logger import log
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
@@ -16,7 +17,7 @@ from flwr.common import Context, NDArrays, Scalar, parameters_to_ndarrays
 from flwr.common.crypto.log_file import log_time
 
 from .task import get_model, get_weights, set_weights, test, get_validation_data
-from flwr.common.crypto.config_cripto import NET,EVALUATION_SIDE  # o "resnet18" se preferisci esplicitarlo
+from flwr.common.crypto.config_cripto import NET, EVALUATION_SIDE, NUM_CLIENTS  # o "resnet18" se preferisci esplicitarlo
 
 from flwr.server.history import History
 from flwr.common.crypto.config_cripto import ACCURACY
@@ -270,10 +271,14 @@ def server_fn(context: Context):
     else:
         log_time("CLIENT SIDE EVALUATION")
 
+    min_available_clients = max(2, NUM_CLIENTS)
+    min_fit_clients = max(2, math.ceil(min_available_clients * float(context.run_config["fraction-fit"])))
+
     strategy = FedAvgWithServerEval(
         fraction_fit=context.run_config["fraction-fit"],
         fraction_evaluate=fraction_evaluate,
-        min_available_clients=2,
+        min_fit_clients=min_fit_clients,
+        min_available_clients=min_available_clients,
         evaluate_fn=server_side,
         initial_parameters=parameters,
         on_fit_config_fn=get_on_fit_config_fn(

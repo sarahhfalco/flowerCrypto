@@ -19,7 +19,11 @@ def save_dataset_to_disk(num_partitions: int):
 
     for partition_id in range(num_partitions):
         partition = fds.load_partition(partition_id)
-        partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
+        partition_train_test = partition.train_test_split(
+            test_size=0.2,
+            seed=42,
+            stratify_by_column="label",
+        )
         partition_train_test.save_to_disk(
             f"./{DATASET_DIRECTORY}/cifar10_part_{partition_id + 1}"
         )
@@ -36,8 +40,8 @@ if __name__ == "__main__":
         "num_partitions",
         type=int,
         nargs="?",
-        default=2,
-        help="Number of partitions to create (default: 2)",
+        default=20,
+        help="Number of partitions to create (default: 20)",
     )
 
     # Parse the arguments
