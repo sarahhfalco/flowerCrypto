@@ -4,6 +4,10 @@
 #   LETTURA CONFIG DA PYTHON
 # ============================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+export PYTHONPATH="$PROJECT_ROOT/framework/py:${PYTHONPATH}"
+
 TLS=$(python3 -c "from flwr.common.crypto.config_cripto import TLS; print(TLS)")
 NUM_CLIENTS=$(python3 -c "from flwr.common.crypto.config_cripto import NUM_CLIENTS; print(NUM_CLIENTS)")
 
@@ -11,6 +15,7 @@ LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 
 echo "[*] Avvio con TLS=$TLS, NUM_CLIENTS=$NUM_CLIENTS"
+echo "[*] PYTHONPATH=$PYTHONPATH"
 
 
 # ============================================================
