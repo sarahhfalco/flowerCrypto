@@ -15,6 +15,8 @@ from torchvision.models import (
     squeezenet1_1,
     mobilenet_v3_small,
     ResNet18_Weights,
+    ResNet34_Weights,
+    SqueezeNet1_1_Weights,
     MobileNet_V3_Small_Weights,
 )
 
@@ -69,7 +71,10 @@ def get_model(model_name: str, num_classes=10, pretrained=True):
                 return self.fc3(x)
         return CustomCNN()
     elif model_name == "squeezenet":
-        model = squeezenet1_1(pretrained=True)
+        weights = SqueezeNet1_1_Weights.DEFAULT if pretrained else None
+        model = squeezenet1_1(weights=weights)
+        # Adattamento CIFAR-10 (32x32): riduce downsampling iniziale
+        model.features[0] = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
         model.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=1)
         model.num_classes = num_classes
         return model
@@ -120,19 +125,33 @@ def get_model(model_name: str, num_classes=10, pretrained=True):
 
         return TinyCNN()
     elif model_name == "resnet18":
-        model = resnet18(pretrained=True)
+        weights = ResNet18_Weights.DEFAULT if pretrained else None
+        model = resnet18(weights=weights)
+        # Adattamento CIFAR-10 (32x32)
+        model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.maxpool = nn.Identity()
         model.fc = nn.Linear(model.fc.in_features, num_classes)
         return model
     elif model_name == "resnet34":
-        model = resnet34(pretrained=True)
-        # 🔧 adattamento per CIFAR (32x32)
+        weights = ResNet34_Weights.DEFAULT if pretrained else None
+        model = resnet34(weights=weights)
+        # Adattamento CIFAR-10 (32x32)
         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        model.maxpool = nn.Identity()  # rimuove maxpool iniziale
+        model.maxpool = nn.Identity()
         model.fc = nn.Linear(model.fc.in_features, num_classes)
         return model
     elif model_name == "mobilenet_v3_small":
         weights = MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
         model = mobilenet_v3_small(weights=weights)
+        # Adattamento CIFAR-10 (32x32): stem meno aggressivo
+        model.features[0][0] = nn.Conv2d(
+            3,
+            16,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
         model.classifier[3] = nn.Linear(model.classifier[3].in_features, num_classes)
         return model
     else:
