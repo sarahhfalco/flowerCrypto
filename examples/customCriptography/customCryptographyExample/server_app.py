@@ -34,10 +34,6 @@ def _append_client_metric_row(
     tempo_reale,
     core_equivalenti,
     percentuale_cpu,
-    ram_iniziale_mb,
-    ram_finale_mb,
-    delta_ram_mb,
-    percentuale_ram_sistema,
     epoche_locali,
     learning_rate_fit,
 ):
@@ -56,10 +52,6 @@ def _append_client_metric_row(
                     "tempo_reale_fit",
                     "core_equivalenti_fit",
                     "percentuale_cpu_fit",
-                    "ram_iniziale_mb_fit",
-                    "ram_finale_mb_fit",
-                    "delta_ram_mb_fit",
-                    "percentuale_ram_sistema_fit",
                     "epoche_locali_fit",
                     "learning_rate_fit",
                 ]
@@ -74,10 +66,6 @@ def _append_client_metric_row(
                 f"{tempo_reale:.6f}",
                 f"{core_equivalenti:.6f}",
                 f"{percentuale_cpu:.6f}",
-                f"{ram_iniziale_mb:.6f}",
-                f"{ram_finale_mb:.6f}",
-                f"{delta_ram_mb:.6f}",
-                f"{percentuale_ram_sistema:.6f}",
                 epoche_locali,
                 f"{learning_rate_fit:.8f}",
             ]
@@ -120,20 +108,12 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
     tempo_reale_pesato = 0.0
     core_equivalenti_pesati = 0.0
     percentuale_cpu_pesata = 0.0
-    ram_iniziale_mb_pesata = 0.0
-    ram_finale_mb_pesata = 0.0
-    delta_ram_mb_pesata = 0.0
-    percentuale_ram_sistema_pesata = 0.0
 
     for idx, (num_examples, metric) in enumerate(metrics, start=1):
         tempo_cpu = float(metric.get("tempo_cpu_fit", 0.0))
         tempo_reale = float(metric.get("tempo_reale_fit", 0.0))
         core_equivalenti = float(metric.get("core_equivalenti_fit", 0.0))
         percentuale_cpu = float(metric.get("percentuale_cpu_fit", 0.0))
-        ram_iniziale_mb = float(metric.get("ram_iniziale_mb_fit", 0.0))
-        ram_finale_mb = float(metric.get("ram_finale_mb_fit", 0.0))
-        delta_ram_mb = float(metric.get("delta_ram_mb_fit", 0.0))
-        percentuale_ram_sistema = float(metric.get("percentuale_ram_sistema_fit", 0.0))
         fit_round = metric.get("fit_round", "unknown")
         epoche_locali = metric.get("epoche_locali_fit", "n/a")
         learning_rate_fit = float(metric.get("learning_rate_fit", 0.0))
@@ -142,14 +122,10 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
         tempo_reale_pesato += tempo_reale * num_examples
         core_equivalenti_pesati += core_equivalenti * num_examples
         percentuale_cpu_pesata += percentuale_cpu * num_examples
-        ram_iniziale_mb_pesata += ram_iniziale_mb * num_examples
-        ram_finale_mb_pesata += ram_finale_mb * num_examples
-        delta_ram_mb_pesata += delta_ram_mb * num_examples
-        percentuale_ram_sistema_pesata += percentuale_ram_sistema * num_examples
 
         log(
             logging.INFO,
-            "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%% | ram_ini=%.1fMB | ram_fin=%.1fMB | delta_ram=%.1fMB | ram_sistema=%.2f%% | epoche=%s | lr=%.5f",
+            "[Round %s] Client-%s metriche | esempi=%s | tempo_cpu=%.3fs | tempo_reale=%.3fs | core_equivalenti=%.2f | percentuale_cpu=%.2f%% | epoche=%s | lr=%.5f",
             fit_round,
             idx,
             num_examples,
@@ -157,10 +133,6 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
             tempo_reale,
             core_equivalenti,
             percentuale_cpu,
-            ram_iniziale_mb,
-            ram_finale_mb,
-            delta_ram_mb,
-            percentuale_ram_sistema,
             epoche_locali,
             learning_rate_fit,
         )
@@ -173,10 +145,6 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
             tempo_reale,
             core_equivalenti,
             percentuale_cpu,
-            ram_iniziale_mb,
-            ram_finale_mb,
-            delta_ram_mb,
-            percentuale_ram_sistema,
             epoche_locali,
             learning_rate_fit,
         )
@@ -189,10 +157,6 @@ def aggregate_fit_metrics(metrics: list[tuple[int, Metrics]]) -> Metrics:
         "tempo_reale_fit": tempo_reale_pesato / total_examples,
         "core_equivalenti_fit": core_equivalenti_pesati / total_examples,
         "percentuale_cpu_fit": percentuale_cpu_pesata / total_examples,
-        "ram_iniziale_mb_fit": ram_iniziale_mb_pesata / total_examples,
-        "ram_finale_mb_fit": ram_finale_mb_pesata / total_examples,
-        "delta_ram_mb_fit": delta_ram_mb_pesata / total_examples,
-        "percentuale_ram_sistema_fit": percentuale_ram_sistema_pesata / total_examples,
     }
 
 
