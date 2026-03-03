@@ -11,6 +11,7 @@ export PYTHONWARNINGS="ignore:co_lnotab is deprecated, use co_lines instead.:Dep
 
 TLS=$(python3 -c "from flwr.common.crypto.config_cripto import TLS; print(TLS)")
 NUM_CLIENTS=$(python3 -c "from flwr.common.crypto.config_cripto import NUM_CLIENTS; print(NUM_CLIENTS)")
+CLIENT_CPU_THREADS=$(python3 -c "from flwr.common.crypto.config_cripto import CLIENT_CPU_THREADS; print(CLIENT_CPU_THREADS)")
 
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
@@ -44,7 +45,7 @@ sleep 2
 #   LIMITAZIONE RISORSE CPU PER I CLIENT
 # ============================================================
 
-CPU_THREADS=6
+CPU_THREADS=$CLIENT_CPU_THREADS
 echo "[*] Ogni client userà massimo $CPU_THREADS thread CPU"
 
 
