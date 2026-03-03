@@ -150,6 +150,7 @@ class Server:
         # Run federated learning for num_rounds
         prev_crypto_total, _ = log_file.get_crypto_totals()
         prev_auth_total = log_file.get_auth_totals()
+        prev_encrypt_total, prev_decrypt_total = log_file.get_encrypt_decrypt_totals()
 
         for current_round in range(1, num_rounds + 1):
             if getattr(self.strategy, "stop_triggered", False):
@@ -191,7 +192,6 @@ class Server:
                 history.add_metrics_centralized(
                     server_round=current_round, metrics=metrics_cen
                 )
-                print("metrics_cen",metrics_cen )
                 if "accuracy" in metrics_cen:
                     log_time("Round %s Accuracy (centralized): %.4f", current_round, metrics_cen["accuracy"])
 
@@ -215,10 +215,15 @@ class Server:
             round_elapsed = timeit.default_timer() - round_start
             current_crypto_total, _ = log_file.get_crypto_totals()
             current_auth_total = log_file.get_auth_totals()
+            current_encrypt_total, current_decrypt_total = log_file.get_encrypt_decrypt_totals()
             round_crypto_time = max(current_crypto_total - prev_crypto_total, 0.0)
             round_auth_time = max(current_auth_total - prev_auth_total, 0.0)
+            round_encrypt_time = max(current_encrypt_total - prev_encrypt_total, 0.0)
+            round_decrypt_time = max(current_decrypt_total - prev_decrypt_total, 0.0)
             prev_crypto_total = current_crypto_total
             prev_auth_total = current_auth_total
+            prev_encrypt_total = current_encrypt_total
+            prev_decrypt_total = current_decrypt_total
             parallel_factor = max(round_fit_parallel, round_eval_parallel, 1)
             parallel_crypto_time = min(
                 round_crypto_time / parallel_factor, round_elapsed
@@ -234,6 +239,8 @@ class Server:
                 "crypto_cumulative": round_crypto_time,
                 "auth_time": parallel_auth_time,
                 "auth_cumulative": round_auth_time,
+                "encrypt_time": round_encrypt_time / parallel_factor,
+                "decrypt_time": round_decrypt_time / parallel_factor,
                 "parallel_fit": float(round_fit_parallel),
                 "parallel_eval": float(round_eval_parallel),
                 "parallel_factor": float(parallel_factor),
