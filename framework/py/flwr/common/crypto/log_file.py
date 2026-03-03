@@ -6,6 +6,8 @@ from .config_cripto import ENCRYPTION_METHOD, ENCRYPTION_ENABLED
 CSV_PATH = None
 CSV_INITIALIZED = False
 TOTAL_CRYPTO_TIME = 0.0
+TOTAL_ENCRYPT_TIME = 0.0
+TOTAL_DECRYPT_TIME = 0.0
 TOTAL_SERIAL_TIME = 0.0
 TOTAL_AUTH_TIME = 0.0
 TOTAL_OVERHEAD_BYTES = 0
@@ -18,11 +20,14 @@ OVERHEAD_COUNT_BY_CATEGORY: Dict[str, int] = {}
 
 def reset_crypto_totals() -> None:
     """Reset accumulated crypto/serialization totals."""
-    global TOTAL_CRYPTO_TIME, TOTAL_SERIAL_TIME, TOTAL_AUTH_TIME
+    global TOTAL_CRYPTO_TIME, TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
+    global TOTAL_SERIAL_TIME, TOTAL_AUTH_TIME
     global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES
     global OVERHEAD_BY_METHOD, OVERHEAD_COUNT_BY_METHOD
     global OVERHEAD_BY_CATEGORY, OVERHEAD_COUNT_BY_CATEGORY
     TOTAL_CRYPTO_TIME = 0.0
+    TOTAL_ENCRYPT_TIME = 0.0
+    TOTAL_DECRYPT_TIME = 0.0
     TOTAL_SERIAL_TIME = 0.0
     TOTAL_AUTH_TIME = 0.0
     TOTAL_OVERHEAD_BYTES = 0
@@ -40,6 +45,13 @@ def add_crypto_time(crypto_time: float, serial_time: float) -> None:
     TOTAL_SERIAL_TIME += serial_time
 
 
+def add_encrypt_decrypt_time(encrypt_time: float, decrypt_time: float) -> None:
+    """Accumulate encryption/decryption time for summary reporting."""
+    global TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
+    TOTAL_ENCRYPT_TIME += encrypt_time
+    TOTAL_DECRYPT_TIME += decrypt_time
+
+
 def add_auth_time(auth_time: float) -> None:
     """Accumulate authentication time for summary reporting."""
     global TOTAL_AUTH_TIME
@@ -49,6 +61,11 @@ def add_auth_time(auth_time: float) -> None:
 def get_crypto_totals() -> tuple[float, float]:
     """Return accumulated crypto and serialization totals."""
     return TOTAL_CRYPTO_TIME, TOTAL_SERIAL_TIME
+
+
+def get_encrypt_decrypt_totals() -> tuple[float, float]:
+    """Return accumulated encryption and decryption totals."""
+    return TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
 
 
 def get_auth_totals() -> float:
@@ -191,6 +208,8 @@ def build_round_time_report() -> List[str]:
     for summary in ROUND_SUMMARIES:
         round_time = summary["round_time"]
         crypto_time = summary["crypto_time"]
+        encrypt_time = summary.get("encrypt_time", 0.0)
+        decrypt_time = summary.get("decrypt_time", 0.0)
         without_crypto = summary["without_crypto"]
         auth_time = summary.get("auth_time", 0.0)
         crypto_cumulative = summary.get("crypto_cumulative", crypto_time)
@@ -214,6 +233,7 @@ def build_round_time_report() -> List[str]:
         lines.append(
             "Round {round_num}: totale={round_time:.2f}s | "
             "crypto={crypto_time:.2f}s ({impact:.2f}%) | "
+            "encrypt={encrypt_time:.2f}s | decrypt={decrypt_time:.2f}s | "
             "auth={auth_time:.2f}s ({auth_impact:.2f}%) | "
             "crypto_cum={crypto_cumulative:.2f}s | auth_cum={auth_cumulative:.2f}s | "
             "senza_critto={without_crypto:.2f}s{parallel_note}".format(
@@ -221,6 +241,8 @@ def build_round_time_report() -> List[str]:
                 round_time=round_time,
                 crypto_time=crypto_time,
                 impact=impact,
+                encrypt_time=encrypt_time,
+                decrypt_time=decrypt_time,
                 auth_time=auth_time,
                 auth_impact=auth_impact,
                 crypto_cumulative=crypto_cumulative,
