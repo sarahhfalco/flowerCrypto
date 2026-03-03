@@ -38,6 +38,7 @@ from .crypto.config_cripto import (
     ENCRYPTION_ENABLED,
     INTEGRITY_ENABLED,
     INTEGRITY_METHOD,
+    VERBOSE_CRYPTO_STATUS,
 )
 from .crypto import config_cripto as _config_cripto
 
