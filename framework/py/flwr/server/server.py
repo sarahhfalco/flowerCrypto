@@ -150,7 +150,9 @@ class Server:
         # Run federated learning for num_rounds
         prev_crypto_total, _ = log_file.get_crypto_totals()
         prev_encrypt_total, prev_decrypt_total = log_file.get_encrypt_decrypt_totals()
+        prev_integrity_total = log_file.get_integrity_totals()
         prev_auth_total = log_file.get_auth_totals()
+        prev_auth_sign_total, prev_auth_verify_total = log_file.get_auth_sign_verify_totals()
 
         for current_round in range(1, num_rounds + 1):
             if getattr(self.strategy, "stop_triggered", False):
@@ -216,15 +218,23 @@ class Server:
             round_elapsed = timeit.default_timer() - round_start
             current_crypto_total, _ = log_file.get_crypto_totals()
             current_encrypt_total, current_decrypt_total = log_file.get_encrypt_decrypt_totals()
+            current_integrity_total = log_file.get_integrity_totals()
             current_auth_total = log_file.get_auth_totals()
+            current_auth_sign_total, current_auth_verify_total = log_file.get_auth_sign_verify_totals()
             round_crypto_time = max(current_crypto_total - prev_crypto_total, 0.0)
             round_encrypt_time = max(current_encrypt_total - prev_encrypt_total, 0.0)
             round_decrypt_time = max(current_decrypt_total - prev_decrypt_total, 0.0)
+            round_integrity_time = max(current_integrity_total - prev_integrity_total, 0.0)
             round_auth_time = max(current_auth_total - prev_auth_total, 0.0)
+            round_auth_sign_time = max(current_auth_sign_total - prev_auth_sign_total, 0.0)
+            round_auth_verify_time = max(current_auth_verify_total - prev_auth_verify_total, 0.0)
             prev_crypto_total = current_crypto_total
             prev_encrypt_total = current_encrypt_total
             prev_decrypt_total = current_decrypt_total
+            prev_integrity_total = current_integrity_total
             prev_auth_total = current_auth_total
+            prev_auth_sign_total = current_auth_sign_total
+            prev_auth_verify_total = current_auth_verify_total
             parallel_factor = max(round_fit_parallel, round_eval_parallel, 1)
             parallel_crypto_time = min(
                 round_crypto_time / parallel_factor, round_elapsed
@@ -235,8 +245,17 @@ class Server:
             parallel_decrypt_time = min(
                 round_decrypt_time / parallel_factor, round_elapsed
             )
+            parallel_integrity_time = min(
+                round_integrity_time / parallel_factor, round_elapsed
+            )
             parallel_auth_time = min(
                 round_auth_time / parallel_factor, round_elapsed
+            )
+            parallel_auth_sign_time = min(
+                round_auth_sign_time / parallel_factor, round_elapsed
+            )
+            parallel_auth_verify_time = min(
+                round_auth_verify_time / parallel_factor, round_elapsed
             )
             without_crypto = max(round_elapsed - parallel_crypto_time, 0.0)
             log_file.ROUND_SUMMARIES.append({
@@ -246,8 +265,11 @@ class Server:
                 "crypto_cumulative": round_crypto_time,
                 "encrypt_time": parallel_encrypt_time,
                 "decrypt_time": parallel_decrypt_time,
+                "integrity_time": parallel_integrity_time,
                 "auth_time": parallel_auth_time,
                 "auth_cumulative": round_auth_time,
+                "auth_sign_time": parallel_auth_sign_time,
+                "auth_verify_time": parallel_auth_verify_time,
                 "parallel_fit": float(round_fit_parallel),
                 "parallel_eval": float(round_eval_parallel),
                 "parallel_factor": float(parallel_factor),
@@ -255,11 +277,14 @@ class Server:
             })
 
             log_time(
-                "Tempo totale round %s: %.2f s | cifratura: %.2f s | decifratura: %.2f s",
+                "Tempo totale round %s: %.2f s | cifratura: %.2f s | decifratura: %.2f s | integrity: %.2f s | firma: %.2f s | verifica: %.2f s",
                 current_round,
                 round_elapsed,
                 parallel_encrypt_time,
                 parallel_decrypt_time,
+                parallel_integrity_time,
+                parallel_auth_sign_time,
+                parallel_auth_verify_time,
             )
 
             history.add_metrics_centralized(
@@ -646,24 +671,72 @@ def run_fl(
 
     log(INFO, "")
     log(INFO, "[SUMMARY]")
-    log(INFO, "Run finished %s round(s) in %.2fs", config.num_rounds, elapsed_time)
-    log_time("Run finished %s round(s) in %.2fs", config.num_rounds, elapsed_time)
-    total_crypto_time, total_serial_time = log_file.get_crypto_totals()
-    total_auth_time = log_file.get_auth_totals()
+    executed_rounds = len(hist.metrics_centralized.get("round_time", []))
+    if executed_rounds == 0:
+        executed_rounds = len(hist.losses_centralized)
+    if executed_rounds == 0:
+        executed_rounds = config.num_rounds
+
+    log(INFO, "Run finished %s round(s) in %.2fs", executed_rounds, elapsed_time)
+    log_time(
+        "Run finished %s round(s) in %.2fs (tempo wall-clock totale, include training+rete+auth/crypto)",
+        executed_rounds,
+        elapsed_time,
+    )
+    total_crypto_time_cumulative, total_serial_time = log_file.get_crypto_totals()
+    total_integrity_time = log_file.get_integrity_totals()
+    total_auth_time_cumulative = log_file.get_auth_totals()
+    total_auth_sign_time_cumulative, total_auth_verify_time_cumulative = log_file.get_auth_sign_verify_totals()
+
+    round_summaries = log_file.get_round_summaries()
+    total_crypto_time_parallel = sum(s.get("crypto_time", 0.0) for s in round_summaries)
+    total_encrypt_time_parallel = sum(s.get("encrypt_time", 0.0) for s in round_summaries)
+    total_decrypt_time_parallel = sum(s.get("decrypt_time", 0.0) for s in round_summaries)
+    total_integrity_time_parallel = sum(s.get("integrity_time", 0.0) for s in round_summaries)
+    total_auth_time_parallel = sum(s.get("auth_time", 0.0) for s in round_summaries)
+    total_auth_sign_time_parallel = sum(s.get("auth_sign_time", 0.0) for s in round_summaries)
+    total_auth_verify_time_parallel = sum(s.get("auth_verify_time", 0.0) for s in round_summaries)
+
     crypto_impact = (
-        (total_crypto_time / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
+        (total_crypto_time_parallel / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
     )
     auth_impact = (
-        (total_auth_time / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
+        (total_auth_time_parallel / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
     )
     log_time(
-        "Totale critto: %.2f s su %.2f s (%.2f%%) | auth: %.2f s (%.2f%%) | serializzazione: %.2f s",
-        total_crypto_time,
+        "Totale critto (parallel): %.2f s su %.2f s (%.2f%%) | encrypt: %.2f s | decrypt: %.2f s | integrity: %.2f s | auth: %.2f s (%.2f%%) | firma: %.2f s | verifica: %.2f s | serializzazione: %.2f s",
+        total_crypto_time_parallel,
         elapsed_time,
         crypto_impact,
-        total_auth_time,
+        total_encrypt_time_parallel,
+        total_decrypt_time_parallel,
+        total_integrity_time_parallel,
+        total_auth_time_parallel,
         auth_impact,
+        total_auth_sign_time_parallel,
+        total_auth_verify_time_parallel,
         total_serial_time,
+    )
+    log_time(
+        "Totale critto cumulativo (somma operazioni su tutti i client): %.2f s | auth cumulativo: %.2f s | integrity cumulativo: %.2f s",
+        total_crypto_time_cumulative,
+        total_auth_time_cumulative,
+        total_integrity_time,
+    )
+    estimated_without_auth_parallel = max(elapsed_time - total_auth_time_parallel, 0.0)
+    estimated_without_crypto_auth_parallel = max(
+        elapsed_time - total_auth_time_parallel - total_crypto_time_parallel,
+        0.0,
+    )
+    log_time(
+        "Tempo totale include auth/crypto. Stima senza auth (parallel): %.2f s | senza auth+crypto (parallel): %.2f s",
+        estimated_without_auth_parallel,
+        estimated_without_crypto_auth_parallel,
+    )
+    log_time(
+        "Totale firma cumulativo: %.2f s | totale verifica cumulativo: %.2f s",
+        total_auth_sign_time_cumulative,
+        total_auth_verify_time_cumulative,
     )
     for line in log_file.build_overhead_report():
         log_time(line)
