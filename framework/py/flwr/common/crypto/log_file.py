@@ -219,6 +219,8 @@ def build_round_time_report() -> List[str]:
     total_round_time = 0.0
     total_crypto_time = 0.0
     total_auth_time = 0.0
+    total_auth_sign_time = 0.0
+    total_auth_verify_time = 0.0
     total_crypto_cumulative = 0.0
     total_auth_cumulative = 0.0
 
@@ -277,6 +279,8 @@ def build_round_time_report() -> List[str]:
         total_round_time += round_time
         total_crypto_time += crypto_time
         total_auth_time += auth_time
+        total_auth_sign_time += auth_sign_time
+        total_auth_verify_time += auth_verify_time
         total_crypto_cumulative += crypto_cumulative
         total_auth_cumulative += auth_cumulative
 
@@ -303,6 +307,12 @@ def build_round_time_report() -> List[str]:
             total_auth=total_auth_time,
             total_round=total_round_time,
             impact=total_auth_impact,
+        )
+    )
+    lines.append(
+        "Totale firma (parallel): {total_sign:.2f}s | totale verifica (parallel): {total_verify:.2f}s".format(
+            total_sign=total_auth_sign_time,
+            total_verify=total_auth_verify_time,
         )
     )
     if total_crypto_cumulative != total_crypto_time:

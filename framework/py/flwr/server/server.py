@@ -666,6 +666,7 @@ def run_fl(
     log_time("Run finished %s round(s) in %.2fs", config.num_rounds, elapsed_time)
     total_crypto_time, total_serial_time = log_file.get_crypto_totals()
     total_auth_time = log_file.get_auth_totals()
+    total_auth_sign_time, total_auth_verify_time = log_file.get_auth_sign_verify_totals()
     crypto_impact = (
         (total_crypto_time / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
     )
@@ -673,12 +674,14 @@ def run_fl(
         (total_auth_time / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
     )
     log_time(
-        "Totale critto: %.2f s su %.2f s (%.2f%%) | auth: %.2f s (%.2f%%) | serializzazione: %.2f s",
+        "Totale critto: %.2f s su %.2f s (%.2f%%) | auth: %.2f s (%.2f%%) | firma: %.2f s | verifica: %.2f s | serializzazione: %.2f s",
         total_crypto_time,
         elapsed_time,
         crypto_impact,
         total_auth_time,
         auth_impact,
+        total_auth_sign_time,
+        total_auth_verify_time,
         total_serial_time,
     )
     for line in log_file.build_overhead_report():
