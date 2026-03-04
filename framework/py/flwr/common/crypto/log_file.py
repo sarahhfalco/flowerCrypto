@@ -10,6 +10,8 @@ TOTAL_ENCRYPT_TIME = 0.0
 TOTAL_DECRYPT_TIME = 0.0
 TOTAL_SERIAL_TIME = 0.0
 TOTAL_AUTH_TIME = 0.0
+TOTAL_AUTH_SIGN_TIME = 0.0
+TOTAL_AUTH_VERIFY_TIME = 0.0
 TOTAL_OVERHEAD_BYTES = 0
 TOTAL_PLAINTEXT_BYTES = 0
 OVERHEAD_BY_METHOD: Dict[str, int] = {}
@@ -22,6 +24,7 @@ def reset_crypto_totals() -> None:
     """Reset accumulated crypto/serialization totals."""
     global TOTAL_CRYPTO_TIME, TOTAL_ENCRYPT_TIME, TOTAL_DECRYPT_TIME
     global TOTAL_SERIAL_TIME, TOTAL_AUTH_TIME
+    global TOTAL_AUTH_SIGN_TIME, TOTAL_AUTH_VERIFY_TIME
     global TOTAL_OVERHEAD_BYTES, TOTAL_PLAINTEXT_BYTES
     global OVERHEAD_BY_METHOD, OVERHEAD_COUNT_BY_METHOD
     global OVERHEAD_BY_CATEGORY, OVERHEAD_COUNT_BY_CATEGORY
@@ -30,6 +33,8 @@ def reset_crypto_totals() -> None:
     TOTAL_DECRYPT_TIME = 0.0
     TOTAL_SERIAL_TIME = 0.0
     TOTAL_AUTH_TIME = 0.0
+    TOTAL_AUTH_SIGN_TIME = 0.0
+    TOTAL_AUTH_VERIFY_TIME = 0.0
     TOTAL_OVERHEAD_BYTES = 0
     TOTAL_PLAINTEXT_BYTES = 0
     OVERHEAD_BY_METHOD = {}
@@ -58,6 +63,13 @@ def add_auth_time(auth_time: float) -> None:
     TOTAL_AUTH_TIME += auth_time
 
 
+def add_auth_sign_verify_time(sign_time: float, verify_time: float) -> None:
+    """Accumulate authentication sign/verify times for summary reporting."""
+    global TOTAL_AUTH_SIGN_TIME, TOTAL_AUTH_VERIFY_TIME
+    TOTAL_AUTH_SIGN_TIME += sign_time
+    TOTAL_AUTH_VERIFY_TIME += verify_time
+
+
 def get_crypto_totals() -> tuple[float, float]:
     """Return accumulated crypto and serialization totals."""
     return TOTAL_CRYPTO_TIME, TOTAL_SERIAL_TIME
@@ -71,6 +83,11 @@ def get_encrypt_decrypt_totals() -> tuple[float, float]:
 def get_auth_totals() -> float:
     """Return accumulated authentication totals."""
     return TOTAL_AUTH_TIME
+
+
+def get_auth_sign_verify_totals() -> tuple[float, float]:
+    """Return accumulated authentication sign/verify totals."""
+    return TOTAL_AUTH_SIGN_TIME, TOTAL_AUTH_VERIFY_TIME
 
 
 def add_overhead(
@@ -202,6 +219,8 @@ def build_round_time_report() -> List[str]:
     total_round_time = 0.0
     total_crypto_time = 0.0
     total_auth_time = 0.0
+    total_auth_sign_time = 0.0
+    total_auth_verify_time = 0.0
     total_crypto_cumulative = 0.0
     total_auth_cumulative = 0.0
 
@@ -212,6 +231,8 @@ def build_round_time_report() -> List[str]:
         decrypt_time = summary.get("decrypt_time", 0.0)
         without_crypto = summary["without_crypto"]
         auth_time = summary.get("auth_time", 0.0)
+        auth_sign_time = summary.get("auth_sign_time", 0.0)
+        auth_verify_time = summary.get("auth_verify_time", 0.0)
         crypto_cumulative = summary.get("crypto_cumulative", crypto_time)
         auth_cumulative = summary.get("auth_cumulative", auth_time)
         parallel_factor = summary.get("parallel_factor")
@@ -235,6 +256,7 @@ def build_round_time_report() -> List[str]:
             "crypto={crypto_time:.2f}s ({impact:.2f}%) | "
             "encrypt={encrypt_time:.2f}s | decrypt={decrypt_time:.2f}s | "
             "auth={auth_time:.2f}s ({auth_impact:.2f}%) | "
+            "firma={auth_sign_time:.2f}s | verifica={auth_verify_time:.2f}s | "
             "crypto_cum={crypto_cumulative:.2f}s | auth_cum={auth_cumulative:.2f}s | "
             "senza_critto={without_crypto:.2f}s{parallel_note}".format(
                 round_num=int(summary["round"]),
@@ -245,6 +267,8 @@ def build_round_time_report() -> List[str]:
                 decrypt_time=decrypt_time,
                 auth_time=auth_time,
                 auth_impact=auth_impact,
+                auth_sign_time=auth_sign_time,
+                auth_verify_time=auth_verify_time,
                 crypto_cumulative=crypto_cumulative,
                 auth_cumulative=auth_cumulative,
                 without_crypto=without_crypto,
@@ -255,6 +279,8 @@ def build_round_time_report() -> List[str]:
         total_round_time += round_time
         total_crypto_time += crypto_time
         total_auth_time += auth_time
+        total_auth_sign_time += auth_sign_time
+        total_auth_verify_time += auth_verify_time
         total_crypto_cumulative += crypto_cumulative
         total_auth_cumulative += auth_cumulative
 
@@ -281,6 +307,12 @@ def build_round_time_report() -> List[str]:
             total_auth=total_auth_time,
             total_round=total_round_time,
             impact=total_auth_impact,
+        )
+    )
+    lines.append(
+        "Totale firma (parallel): {total_sign:.2f}s | totale verifica (parallel): {total_verify:.2f}s".format(
+            total_sign=total_auth_sign_time,
+            total_verify=total_auth_verify_time,
         )
     )
     if total_crypto_cumulative != total_crypto_time:
