@@ -72,6 +72,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     total_deser_time = 0.0   # tempo per costruire gli oggetti Parameters (no decrypt)
     total_crypto_time = 0.0  # tempo crypto (cifratura/integrità)
     total_decrypt_time = 0.0
+    total_integrity_time = 0.0
     total_auth_time = 0.0
     total_auth_verify_time = 0.0
 
@@ -105,7 +106,9 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
             start_integrity = time.perf_counter()
             data = check_integrity(data, INTEGRITY_METHOD)
             end_integrity = time.perf_counter()
-            total_crypto_time += (end_integrity - start_integrity)
+            integrity_elapsed = end_integrity - start_integrity
+            total_crypto_time += integrity_elapsed
+            total_integrity_time += integrity_elapsed
 
         if ENCRYPTION_ENABLED:
             start_decrypt = time.perf_counter()
@@ -128,6 +131,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
     auth_impact = (total_auth_time / total_time * 100.0) if total_time > 0 else 0.0
     log_file.add_crypto_time(total_crypto_time, total_deser_time)
     log_file.add_encrypt_decrypt_time(0.0, total_decrypt_time)
+    log_file.add_integrity_time(total_integrity_time)
     log_file.add_auth_time(total_auth_time)
     log_file.add_auth_sign_verify_time(0.0, total_auth_verify_time)
     log_time(
@@ -158,6 +162,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     tot_serial_time = 0.0
     tot_crypto_time = 0.0
     tot_encrypt_time = 0.0
+    tot_integrity_time = 0.0
     tot_auth_time = 0.0
     tot_auth_sign_time = 0.0
 
@@ -195,7 +200,9 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
             start_integrity = time.perf_counter()
             dataR = add_integrity(dataR, INTEGRITY_METHOD)
             end_integrity = time.perf_counter()
-            tot_crypto_time += (end_integrity - start_integrity)
+            integrity_elapsed = end_integrity - start_integrity
+            tot_crypto_time += integrity_elapsed
+            tot_integrity_time += integrity_elapsed
             log_file.add_overhead(
                 INTEGRITY_METHOD,
                 "integrity",
@@ -235,6 +242,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
     auth_impact = (tot_auth_time / total_time * 100.0) if total_time > 0 else 0.0
     log_file.add_crypto_time(tot_crypto_time, tot_serial_time)
     log_file.add_encrypt_decrypt_time(tot_encrypt_time, 0.0)
+    log_file.add_integrity_time(tot_integrity_time)
     log_file.add_auth_time(tot_auth_time)
     log_file.add_auth_sign_verify_time(tot_auth_sign_time, 0.0)
     log_time(
