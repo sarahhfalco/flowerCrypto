@@ -66,6 +66,64 @@ def _track_concurrency(
         return func(*args)
     finally:
         tracker.decrement()
+
+
+def _wait_for_futures_with_progress(
+    submitted_fs: set[concurrent.futures.Future],
+    timeout: Optional[float],
+    op_name: str,
+) -> tuple[set[concurrent.futures.Future], set[concurrent.futures.Future]]:
+    """Wait for futures while periodically logging pending work.
+
+    If `timeout` is None, wait indefinitely but emit progress warnings.
+    If `timeout` is set, stop waiting after timeout and return unfinished futures.
+    """
+    poll_interval = 30.0
+    started_at = timeit.default_timer()
+    remaining = set(submitted_fs)
+    finished_total: set[concurrent.futures.Future] = set()
+
+    while remaining:
+        elapsed = timeit.default_timer() - started_at
+        if timeout is not None:
+            remaining_budget = timeout - elapsed
+            if remaining_budget <= 0.0:
+                break
+            current_poll = min(poll_interval, remaining_budget)
+        else:
+            current_poll = poll_interval
+
+        finished_now, not_done = concurrent.futures.wait(
+            fs=remaining,
+            timeout=current_poll,
+        )
+        if finished_now:
+            finished_total.update(finished_now)
+            remaining = set(not_done)
+            continue
+
+        # No completion within poll window: emit diagnostic warning
+        if timeout is None:
+            log(
+                WARN,
+                "%s still waiting for %s/%s client(s) after %.1fs (no round_timeout set)",
+                op_name,
+                len(remaining),
+                len(submitted_fs),
+                elapsed,
+            )
+        else:
+            log(
+                WARN,
+                "%s still waiting for %s/%s client(s) after %.1fs (round_timeout=%.1fs)",
+                op_name,
+                len(remaining),
+                len(submitted_fs),
+                elapsed,
+                timeout,
+            )
+
+    return finished_total, remaining
 from flwr.common.logger import log
 from flwr.common.typing import GetParametersIns
 from flwr.server.client_manager import ClientManager, SimpleClientManager
@@ -148,6 +206,14 @@ class Server:
             log(INFO, "Evaluation returned no results (`None`)")
 
         # Run federated learning for num_rounds
+        if timeout is None:
+            log(
+                WARN,
+                "round_timeout is None: the server can wait indefinitely for slow/hung clients",
+            )
+            log_time(
+                "ATTENZIONE: round_timeout=None, il server può restare in attesa indefinita dei client",
+            )
         prev_crypto_total, _ = log_file.get_crypto_totals()
         prev_encrypt_total, prev_decrypt_total = log_file.get_encrypt_decrypt_totals()
         prev_integrity_total = log_file.get_integrity_totals()
@@ -339,6 +405,8 @@ class Server:
             len(results),
             len(failures),
         )
+        for failure in failures:
+            log(WARN, "evaluate failure detail: %s", failure)
 
         # Aggregate the evaluation results
         aggregated_result: tuple[
@@ -387,6 +455,8 @@ class Server:
             len(results),
             len(failures),
         )
+        for failure in failures:
+            log(WARN, "fit failure detail: %s", failure)
 
         # Aggregate training results
         aggregated_result: tuple[
@@ -450,10 +520,14 @@ def reconnect_clients(
             executor.submit(reconnect_client, client_proxy, ins, timeout)
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+        finished_fs, unfinished_fs = _wait_for_futures_with_progress(
+            submitted_fs,
+            timeout,
+            "reconnect",
         )
+        if unfinished_fs:
+            for future in unfinished_fs:
+                future.cancel()
 
     # Gather results
     results: list[tuple[ClientProxy, DisconnectRes]] = []
@@ -503,10 +577,14 @@ def fit_clients(
             )
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+        finished_fs, unfinished_fs = _wait_for_futures_with_progress(
+            submitted_fs,
+            timeout,
+            "fit",
         )
+        if unfinished_fs:
+            for future in unfinished_fs:
+                future.cancel()
 
     # Gather results
     results: list[tuple[ClientProxy, FitRes]] = []
@@ -514,6 +592,13 @@ def fit_clients(
     for future in finished_fs:
         _handle_finished_future_after_fit(
             future=future, results=results, failures=failures
+        )
+    if unfinished_fs:
+        failures.extend(
+            TimeoutError(
+                f"fit timeout waiting for client result (pending={len(unfinished_fs)})"
+            )
+            for _ in unfinished_fs
         )
     return (results, failures), tracker.peak
 
@@ -572,10 +657,14 @@ def evaluate_clients(
             )
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+        finished_fs, unfinished_fs = _wait_for_futures_with_progress(
+            submitted_fs,
+            timeout,
+            "evaluate",
         )
+        if unfinished_fs:
+            for future in unfinished_fs:
+                future.cancel()
 
     # Gather results
     results: list[tuple[ClientProxy, EvaluateRes]] = []
@@ -583,6 +672,13 @@ def evaluate_clients(
     for future in finished_fs:
         _handle_finished_future_after_evaluate(
             future=future, results=results, failures=failures
+        )
+    if unfinished_fs:
+        failures.extend(
+            TimeoutError(
+                f"evaluate timeout waiting for client result (pending={len(unfinished_fs)})"
+            )
+            for _ in unfinished_fs
         )
     return (results, failures), tracker.peak
 

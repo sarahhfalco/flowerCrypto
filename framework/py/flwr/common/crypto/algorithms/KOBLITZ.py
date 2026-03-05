@@ -37,13 +37,28 @@ SUPPORTED_CURVES: Dict[str, KoblitzCurve] = {
     "ECCFROG522PP": KoblitzCurve("ECCFROG522PP", 521, "ECCFROG522PP"),
 }
 
-LEGACY_ALIASES: Dict[str, str] = {}
+LEGACY_ALIASES: Dict[str, str] = {
+    "ECCFROG255": "ECCFROG522PP",
+    "ECCFROG_255": "ECCFROG522PP",
+}
+
 
 SUPPORTED_METHODS = set(SUPPORTED_CURVES.keys()) | set(LEGACY_ALIASES.keys())
 
+# Cache ephemeral keys to avoid re-generating a private key for every message
+# when no explicit key is configured (significantly impacts pure-Python ECCFROG).
+_EPHEMERAL_PRIVATE_KEYS: Dict[str, object] = {}
+
+
+def _normalize_method_name(curve_name: str | None) -> str:
+    if curve_name is None:
+        return ""
+    return curve_name.strip().upper().replace("-", "_")
+
 
 def _get_curve(curve_name: str) -> KoblitzCurve:
-    normalized_name = LEGACY_ALIASES.get(curve_name, curve_name)
+    normalized_input = _normalize_method_name(curve_name)
+    normalized_name = LEGACY_ALIASES.get(normalized_input, normalized_input)
     try:
         return SUPPORTED_CURVES[normalized_name]
     except KeyError as exc:  # pragma: no cover - safety net
@@ -51,7 +66,9 @@ def _get_curve(curve_name: str) -> KoblitzCurve:
 
 
 def is_supported_method(curve_name: str) -> bool:
-    return curve_name in SUPPORTED_METHODS
+    normalized_input = _normalize_method_name(curve_name)
+    normalized_name = LEGACY_ALIASES.get(normalized_input, normalized_input)
+    return normalized_name in SUPPORTED_CURVES
 
 
 def _load_public_key(key: object, curve: KoblitzCurve) -> object:
@@ -121,7 +138,10 @@ def authenticate(data: bytes, curve_name: str, ecc_privkey: object) -> bytes:
     include_public_key = ecc_privkey is None
     if curve.name == "ECCFROG522PP":
         if ecc_privkey is None:
-            private_key = eccfrog.generate_private_key()
+            private_key = _EPHEMERAL_PRIVATE_KEYS.get(curve.name)
+            if private_key is None:
+                private_key = eccfrog.generate_private_key()
+                _EPHEMERAL_PRIVATE_KEYS[curve.name] = private_key
         else:
             private_key = _load_private_key(ecc_privkey, curve)
         signature = eccfrog.sign(data, private_key)
@@ -130,12 +150,15 @@ def authenticate(data: bytes, curve_name: str, ecc_privkey: object) -> bytes:
         )
         return _pack_signature(data, signature, public_key_bytes)
     if ecc_privkey is None:
-        if curve.curve is ed25519.Ed25519PrivateKey:
-            private_key = ed25519.Ed25519PrivateKey.generate()
-        elif curve.curve is ed448.Ed448PrivateKey:
-            private_key = ed448.Ed448PrivateKey.generate()
-        else:
-            private_key = ec.generate_private_key(curve.curve)
+        private_key = _EPHEMERAL_PRIVATE_KEYS.get(curve.name)
+        if private_key is None:
+            if curve.curve is ed25519.Ed25519PrivateKey:
+                private_key = ed25519.Ed25519PrivateKey.generate()
+            elif curve.curve is ed448.Ed448PrivateKey:
+                private_key = ed448.Ed448PrivateKey.generate()
+            else:
+                private_key = ec.generate_private_key(curve.curve)
+            _EPHEMERAL_PRIVATE_KEYS[curve.name] = private_key
     else:
         private_key = _load_private_key(ecc_privkey, curve)
     if isinstance(private_key, (ed25519.Ed25519PrivateKey, ed448.Ed448PrivateKey)):
