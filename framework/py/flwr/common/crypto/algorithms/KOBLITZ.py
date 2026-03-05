@@ -37,13 +37,24 @@ SUPPORTED_CURVES: Dict[str, KoblitzCurve] = {
     "ECCFROG522PP": KoblitzCurve("ECCFROG522PP", 521, "ECCFROG522PP"),
 }
 
-LEGACY_ALIASES: Dict[str, str] = {}
+LEGACY_ALIASES: Dict[str, str] = {
+    "ECCFROG255": "ECCFROG522PP",
+    "ECCFROG_255": "ECCFROG522PP",
+}
+
 
 SUPPORTED_METHODS = set(SUPPORTED_CURVES.keys()) | set(LEGACY_ALIASES.keys())
 
 
+def _normalize_method_name(curve_name: str | None) -> str:
+    if curve_name is None:
+        return ""
+    return curve_name.strip().upper().replace("-", "_")
+
+
 def _get_curve(curve_name: str) -> KoblitzCurve:
-    normalized_name = LEGACY_ALIASES.get(curve_name, curve_name)
+    normalized_input = _normalize_method_name(curve_name)
+    normalized_name = LEGACY_ALIASES.get(normalized_input, normalized_input)
     try:
         return SUPPORTED_CURVES[normalized_name]
     except KeyError as exc:  # pragma: no cover - safety net
@@ -51,7 +62,9 @@ def _get_curve(curve_name: str) -> KoblitzCurve:
 
 
 def is_supported_method(curve_name: str) -> bool:
-    return curve_name in SUPPORTED_METHODS
+    normalized_input = _normalize_method_name(curve_name)
+    normalized_name = LEGACY_ALIASES.get(normalized_input, normalized_input)
+    return normalized_name in SUPPORTED_CURVES
 
 
 def _load_public_key(key: object, curve: KoblitzCurve) -> object:
