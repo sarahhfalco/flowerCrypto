@@ -66,6 +66,65 @@ def _track_concurrency(
         return func(*args)
     finally:
         tracker.decrement()
+
+
+def _wait_for_futures_with_progress(
+    submitted_fs: set[concurrent.futures.Future],
+    timeout: Optional[float],
+    op_name: str,
+) -> tuple[set[concurrent.futures.Future], set[concurrent.futures.Future]]:
+    """Wait for futures while periodically logging pending work.
+
+    If `timeout` is None, wait indefinitely but emit progress warnings.
+    If `timeout` is set, stop waiting after timeout and return unfinished futures.
+    """
+    poll_interval = 10.0
+    started_at = timeit.default_timer()
+    remaining = set(submitted_fs)
+    finished_total: set[concurrent.futures.Future] = set()
+
+    while remaining:
+        elapsed = timeit.default_timer() - started_at
+        if timeout is not None:
+            remaining_budget = timeout - elapsed
+            if remaining_budget <= 0.0:
+                break
+            current_poll = min(poll_interval, remaining_budget)
+        else:
+            current_poll = poll_interval
+
+        finished_now, not_done = concurrent.futures.wait(
+            fs=remaining,
+            timeout=current_poll,
+        )
+        if finished_now:
+            finished_total.update(finished_now)
+            remaining = set(not_done)
+            continue
+
+        # No completion within poll window: emit diagnostic warning
+        elapsed_after_wait = timeit.default_timer() - started_at
+        if timeout is None:
+            log(
+                WARN,
+                "%s still waiting for %s/%s client(s) after %.1fs (no round_timeout set)",
+                op_name,
+                len(remaining),
+                len(submitted_fs),
+                elapsed_after_wait,
+            )
+        else:
+            log(
+                WARN,
+                "%s still waiting for %s/%s client(s) after %.1fs (round_timeout=%.1fs)",
+                op_name,
+                len(remaining),
+                len(submitted_fs),
+                elapsed_after_wait,
+                timeout,
+            )
+
+    return finished_total, remaining
 from flwr.common.logger import log
 from flwr.common.typing import GetParametersIns
 from flwr.server.client_manager import ClientManager, SimpleClientManager
@@ -148,13 +207,32 @@ class Server:
             log(INFO, "Evaluation returned no results (`None`)")
 
         # Run federated learning for num_rounds
+        if getattr(self.strategy, "stop_criteria", None):
+            log_time("Early stop criteria attivi: %s", getattr(self.strategy, "stop_criteria"))
+
+        effective_timeout = timeout
+        if timeout is None:
+            log(
+                WARN,
+                "round_timeout is None: applying fallback timeout of 600s to avoid indefinite waits",
+            )
+            log_time(
+                "ATTENZIONE: round_timeout=None, applico fallback a 600s per evitare attese indefinite dei client",
+            )
+            effective_timeout = 600.0
         prev_crypto_total, _ = log_file.get_crypto_totals()
         prev_encrypt_total, prev_decrypt_total = log_file.get_encrypt_decrypt_totals()
+        prev_integrity_total = log_file.get_integrity_totals()
         prev_auth_total = log_file.get_auth_totals()
+        prev_auth_sign_total, prev_auth_verify_total = log_file.get_auth_sign_verify_totals()
 
         for current_round in range(1, num_rounds + 1):
             if getattr(self.strategy, "stop_triggered", False):
+                stop_reason = getattr(self.strategy, "stop_reason", None)
                 log(INFO, "Early stopping triggered at round %s, stopping server.", current_round - 1)
+                if stop_reason:
+                    log(INFO, "Early stopping reason: %s", stop_reason)
+                    log_time("Early stopping reason: %s", stop_reason)
                 log_time("Early stopping triggered at round %s, stopping server.", current_round - 1)
                 break
 
@@ -165,7 +243,7 @@ class Server:
             # Train model
             round_fit_clients = 0
             round_eval_clients = 0
-            res_fit = self.fit_round(server_round=current_round, timeout=timeout)
+            res_fit = self.fit_round(server_round=current_round, timeout=effective_timeout)
             round_fit_parallel = 0
             if res_fit is not None:
                 (
@@ -197,7 +275,7 @@ class Server:
                     log_time("Round %s Accuracy (centralized): %.4f", current_round, metrics_cen["accuracy"])
 
             # Evaluate model on a sample of available clients
-            res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
+            res_fed = self.evaluate_round(server_round=current_round, timeout=effective_timeout)
             round_eval_parallel = 0
             if res_fed is not None:
                 (
@@ -216,15 +294,23 @@ class Server:
             round_elapsed = timeit.default_timer() - round_start
             current_crypto_total, _ = log_file.get_crypto_totals()
             current_encrypt_total, current_decrypt_total = log_file.get_encrypt_decrypt_totals()
+            current_integrity_total = log_file.get_integrity_totals()
             current_auth_total = log_file.get_auth_totals()
+            current_auth_sign_total, current_auth_verify_total = log_file.get_auth_sign_verify_totals()
             round_crypto_time = max(current_crypto_total - prev_crypto_total, 0.0)
             round_encrypt_time = max(current_encrypt_total - prev_encrypt_total, 0.0)
             round_decrypt_time = max(current_decrypt_total - prev_decrypt_total, 0.0)
+            round_integrity_time = max(current_integrity_total - prev_integrity_total, 0.0)
             round_auth_time = max(current_auth_total - prev_auth_total, 0.0)
+            round_auth_sign_time = max(current_auth_sign_total - prev_auth_sign_total, 0.0)
+            round_auth_verify_time = max(current_auth_verify_total - prev_auth_verify_total, 0.0)
             prev_crypto_total = current_crypto_total
             prev_encrypt_total = current_encrypt_total
             prev_decrypt_total = current_decrypt_total
+            prev_integrity_total = current_integrity_total
             prev_auth_total = current_auth_total
+            prev_auth_sign_total = current_auth_sign_total
+            prev_auth_verify_total = current_auth_verify_total
             parallel_factor = max(round_fit_parallel, round_eval_parallel, 1)
             parallel_crypto_time = min(
                 round_crypto_time / parallel_factor, round_elapsed
@@ -235,8 +321,17 @@ class Server:
             parallel_decrypt_time = min(
                 round_decrypt_time / parallel_factor, round_elapsed
             )
+            parallel_integrity_time = min(
+                round_integrity_time / parallel_factor, round_elapsed
+            )
             parallel_auth_time = min(
                 round_auth_time / parallel_factor, round_elapsed
+            )
+            parallel_auth_sign_time = min(
+                round_auth_sign_time / parallel_factor, round_elapsed
+            )
+            parallel_auth_verify_time = min(
+                round_auth_verify_time / parallel_factor, round_elapsed
             )
             without_crypto = max(round_elapsed - parallel_crypto_time, 0.0)
             log_file.ROUND_SUMMARIES.append({
@@ -246,8 +341,11 @@ class Server:
                 "crypto_cumulative": round_crypto_time,
                 "encrypt_time": parallel_encrypt_time,
                 "decrypt_time": parallel_decrypt_time,
+                "integrity_time": parallel_integrity_time,
                 "auth_time": parallel_auth_time,
                 "auth_cumulative": round_auth_time,
+                "auth_sign_time": parallel_auth_sign_time,
+                "auth_verify_time": parallel_auth_verify_time,
                 "parallel_fit": float(round_fit_parallel),
                 "parallel_eval": float(round_eval_parallel),
                 "parallel_factor": float(parallel_factor),
@@ -255,11 +353,14 @@ class Server:
             })
 
             log_time(
-                "Tempo totale round %s: %.2f s | cifratura: %.2f s | decifratura: %.2f s",
+                "Tempo totale round %s: %.2f s | cifratura: %.2f s | decifratura: %.2f s | integrity: %.2f s | firma: %.2f s | verifica: %.2f s",
                 current_round,
                 round_elapsed,
                 parallel_encrypt_time,
                 parallel_decrypt_time,
+                parallel_integrity_time,
+                parallel_auth_sign_time,
+                parallel_auth_verify_time,
             )
 
             history.add_metrics_centralized(
@@ -314,6 +415,8 @@ class Server:
             len(results),
             len(failures),
         )
+        for failure in failures:
+            log(WARN, "evaluate failure detail: %s", failure)
 
         # Aggregate the evaluation results
         aggregated_result: tuple[
@@ -362,6 +465,8 @@ class Server:
             len(results),
             len(failures),
         )
+        for failure in failures:
+            log(WARN, "fit failure detail: %s", failure)
 
         # Aggregate training results
         aggregated_result: tuple[
@@ -425,10 +530,14 @@ def reconnect_clients(
             executor.submit(reconnect_client, client_proxy, ins, timeout)
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+        finished_fs, unfinished_fs = _wait_for_futures_with_progress(
+            submitted_fs,
+            timeout,
+            "reconnect",
         )
+        if unfinished_fs:
+            for future in unfinished_fs:
+                future.cancel()
 
     # Gather results
     results: list[tuple[ClientProxy, DisconnectRes]] = []
@@ -478,10 +587,14 @@ def fit_clients(
             )
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+        finished_fs, unfinished_fs = _wait_for_futures_with_progress(
+            submitted_fs,
+            timeout,
+            "fit",
         )
+        if unfinished_fs:
+            for future in unfinished_fs:
+                future.cancel()
 
     # Gather results
     results: list[tuple[ClientProxy, FitRes]] = []
@@ -489,6 +602,13 @@ def fit_clients(
     for future in finished_fs:
         _handle_finished_future_after_fit(
             future=future, results=results, failures=failures
+        )
+    if unfinished_fs:
+        failures.extend(
+            TimeoutError(
+                f"fit timeout waiting for client result (pending={len(unfinished_fs)})"
+            )
+            for _ in unfinished_fs
         )
     return (results, failures), tracker.peak
 
@@ -547,10 +667,14 @@ def evaluate_clients(
             )
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+        finished_fs, unfinished_fs = _wait_for_futures_with_progress(
+            submitted_fs,
+            timeout,
+            "evaluate",
         )
+        if unfinished_fs:
+            for future in unfinished_fs:
+                future.cancel()
 
     # Gather results
     results: list[tuple[ClientProxy, EvaluateRes]] = []
@@ -558,6 +682,13 @@ def evaluate_clients(
     for future in finished_fs:
         _handle_finished_future_after_evaluate(
             future=future, results=results, failures=failures
+        )
+    if unfinished_fs:
+        failures.extend(
+            TimeoutError(
+                f"evaluate timeout waiting for client result (pending={len(unfinished_fs)})"
+            )
+            for _ in unfinished_fs
         )
     return (results, failures), tracker.peak
 
@@ -646,24 +777,72 @@ def run_fl(
 
     log(INFO, "")
     log(INFO, "[SUMMARY]")
-    log(INFO, "Run finished %s round(s) in %.2fs", config.num_rounds, elapsed_time)
-    log_time("Run finished %s round(s) in %.2fs", config.num_rounds, elapsed_time)
-    total_crypto_time, total_serial_time = log_file.get_crypto_totals()
-    total_auth_time = log_file.get_auth_totals()
+    executed_rounds = len(hist.metrics_centralized.get("round_time", []))
+    if executed_rounds == 0:
+        executed_rounds = len(hist.losses_centralized)
+    if executed_rounds == 0:
+        executed_rounds = config.num_rounds
+
+    log(INFO, "Run finished %s round(s) in %.2fs", executed_rounds, elapsed_time)
+    log_time(
+        "Run finished %s round(s) in %.2fs (tempo wall-clock totale, include training+rete+auth/crypto)",
+        executed_rounds,
+        elapsed_time,
+    )
+    total_crypto_time_cumulative, total_serial_time = log_file.get_crypto_totals()
+    total_integrity_time = log_file.get_integrity_totals()
+    total_auth_time_cumulative = log_file.get_auth_totals()
+    total_auth_sign_time_cumulative, total_auth_verify_time_cumulative = log_file.get_auth_sign_verify_totals()
+
+    round_summaries = log_file.get_round_summaries()
+    total_crypto_time_parallel = sum(s.get("crypto_time", 0.0) for s in round_summaries)
+    total_encrypt_time_parallel = sum(s.get("encrypt_time", 0.0) for s in round_summaries)
+    total_decrypt_time_parallel = sum(s.get("decrypt_time", 0.0) for s in round_summaries)
+    total_integrity_time_parallel = sum(s.get("integrity_time", 0.0) for s in round_summaries)
+    total_auth_time_parallel = sum(s.get("auth_time", 0.0) for s in round_summaries)
+    total_auth_sign_time_parallel = sum(s.get("auth_sign_time", 0.0) for s in round_summaries)
+    total_auth_verify_time_parallel = sum(s.get("auth_verify_time", 0.0) for s in round_summaries)
+
     crypto_impact = (
-        (total_crypto_time / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
+        (total_crypto_time_parallel / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
     )
     auth_impact = (
-        (total_auth_time / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
+        (total_auth_time_parallel / elapsed_time * 100.0) if elapsed_time > 0 else 0.0
     )
     log_time(
-        "Totale critto: %.2f s su %.2f s (%.2f%%) | auth: %.2f s (%.2f%%) | serializzazione: %.2f s",
-        total_crypto_time,
+        "Totale critto (parallel): %.2f s su %.2f s (%.2f%%) | encrypt: %.2f s | decrypt: %.2f s | integrity: %.2f s | auth: %.2f s (%.2f%%) | firma: %.2f s | verifica: %.2f s | serializzazione: %.2f s",
+        total_crypto_time_parallel,
         elapsed_time,
         crypto_impact,
-        total_auth_time,
+        total_encrypt_time_parallel,
+        total_decrypt_time_parallel,
+        total_integrity_time_parallel,
+        total_auth_time_parallel,
         auth_impact,
+        total_auth_sign_time_parallel,
+        total_auth_verify_time_parallel,
         total_serial_time,
+    )
+    log_time(
+        "Totale critto cumulativo (somma operazioni su tutti i client): %.2f s | auth cumulativo: %.2f s | integrity cumulativo: %.2f s",
+        total_crypto_time_cumulative,
+        total_auth_time_cumulative,
+        total_integrity_time,
+    )
+    estimated_without_auth_parallel = max(elapsed_time - total_auth_time_parallel, 0.0)
+    estimated_without_crypto_auth_parallel = max(
+        elapsed_time - total_auth_time_parallel - total_crypto_time_parallel,
+        0.0,
+    )
+    log_time(
+        "Tempo totale include auth/crypto. Stima senza auth (parallel): %.2f s | senza auth+crypto (parallel): %.2f s",
+        estimated_without_auth_parallel,
+        estimated_without_crypto_auth_parallel,
+    )
+    log_time(
+        "Totale firma cumulativo: %.2f s | totale verifica cumulativo: %.2f s",
+        total_auth_sign_time_cumulative,
+        total_auth_verify_time_cumulative,
     )
     for line in log_file.build_overhead_report():
         log_time(line)

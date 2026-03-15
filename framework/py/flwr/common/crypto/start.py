@@ -19,6 +19,7 @@ AUTH_METHODS = [
     "ED25519",
     "ED448",
     "ECCFROG522PP",
+    "ECCFROG255",
 ]
 NET_OPTIONS = ["custom_cnn", "resnet18", "resnet34", "tiny_cnn", "squeezenet", "mobilenet_v3_small"]
 EVALUATION_OPTIONS = ["server", "client"]

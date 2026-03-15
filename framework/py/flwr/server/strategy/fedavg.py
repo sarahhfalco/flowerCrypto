@@ -135,6 +135,7 @@ class FedAvg(Strategy):
         self.inplace = inplace
         self.stop_criteria = stop_criteria or {}
         self.stop_triggered = False
+        self.stop_reason: str | None = None
 
 
     def __repr__(self) -> str:
@@ -286,13 +287,19 @@ class FedAvg(Strategy):
             if "loss_leq" in self.stop_criteria and loss_aggregated is not None:
                 if loss_aggregated <= self.stop_criteria["loss_leq"]:
                     self.stop_triggered = True
-                    log(WARNING, f"[EarlyStop] Loss <= {self.stop_criteria['loss_leq']} at round {server_round}")
+                    self.stop_reason = (
+                        f"loss_leq reached: loss={loss_aggregated:.6f} <= {self.stop_criteria['loss_leq']}"
+                    )
+                    log(WARNING, f"[EarlyStop] {self.stop_reason} at round {server_round}")
             if "metric_ge" in self.stop_criteria:
                 metric_name, threshold = self.stop_criteria["metric_ge"]
                 if metrics_aggregated and metric_name in metrics_aggregated:
                     if metrics_aggregated[metric_name] >= threshold:
                         self.stop_triggered = True
-                        log(WARNING, f"[EarlyStop] {metric_name} >= {threshold} at round {server_round}")
+                        self.stop_reason = (
+                            f"metric_ge reached: {metric_name}={metrics_aggregated[metric_name]} >= {threshold}"
+                        )
+                        log(WARNING, f"[EarlyStop] {self.stop_reason} at round {server_round}")
 
         return loss_aggregated, metrics_aggregated
 
