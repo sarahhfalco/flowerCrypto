@@ -12,7 +12,7 @@ import torch
 
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
-from flwr.common.crypto.config_cripto import NET
+from flwr.common.crypto.config_cripto import NET, TLS_CIPHER_SUITES
 
 from .task import (
     get_model,
@@ -38,6 +38,10 @@ from .task import (
 import math  # mettilo in cima al file, insieme agli altri import
 
 MSS = 1460  # TCP payload tipico con MTU 1500 (IPv4)
+
+if TLS_CIPHER_SUITES:
+    os.environ["GRPC_SSL_CIPHER_SUITES"] = TLS_CIPHER_SUITES
+    log(logging.INFO, "TLS cipher suites impostate da config: %s", TLS_CIPHER_SUITES)
 
 class FlowerClient(NumPyClient):
 

@@ -1,7 +1,8 @@
 import os
+import ssl
 from typing import List, Dict
 
-from .config_cripto import ENCRYPTION_METHOD, ENCRYPTION_ENABLED, TLS
+from .config_cripto import ENCRYPTION_METHOD, ENCRYPTION_ENABLED, TLS, TLS_CIPHER_SUITES
 
 CSV_PATH = None
 CSV_INITIALIZED = False
@@ -131,10 +132,28 @@ def _tls_record_overhead_bytes(cipher_suite: str) -> int:
 
 
 def _get_tls_cipher_suites() -> list[str]:
-    configured = os.getenv("GRPC_SSL_CIPHER_SUITES", "").strip()
+    configured_env = os.getenv("GRPC_SSL_CIPHER_SUITES", "").strip()
+    configured = configured_env or (TLS_CIPHER_SUITES or "").strip()
     if configured:
         return [item.strip() for item in configured.split(":") if item.strip()]
     return ["default(grpc-openssl)"]
+
+
+def _get_default_openssl_cipher_candidates(limit: int = 10) -> list[str]:
+    """Return a best-effort list of default OpenSSL cipher candidates."""
+    try:
+        context = ssl.create_default_context()
+        ciphers = context.get_ciphers()
+        names: list[str] = []
+        for cipher in ciphers:
+            name = cipher.get("name")
+            if name and name not in names:
+                names.append(name)
+            if len(names) >= limit:
+                break
+        return names
+    except Exception:
+        return []
 
 
 def build_tls_report() -> List[str]:
@@ -154,7 +173,7 @@ def build_tls_report() -> List[str]:
         else 0.0
     )
 
-    return [
+    lines = [
         f"TLS attivo: sì | Cipher suite(s): {suites_display}",
         (
             "Overhead TLS stimato: "
@@ -163,6 +182,21 @@ def build_tls_report() -> List[str]:
             f"(stima per record da suite: {reference_suite})"
         ),
     ]
+
+    if reference_suite == "default(grpc-openssl)":
+        candidates = _get_default_openssl_cipher_candidates(limit=10)
+        if candidates:
+            lines.append(
+                "Suite possibili con default OpenSSL (non necessariamente negoziata): "
+                + ", ".join(candidates)
+            )
+        lines.append(
+            "Nota: gRPC Python non espone facilmente la cipher suite realmente negoziata; "
+            "per conoscerla con certezza imposta GRPC_SSL_CIPHER_SUITES esplicitamente."
+        )
+
+    lines.append(f"OpenSSL runtime: {ssl.OPENSSL_VERSION}")
+    return lines
 
 
 def add_overhead(

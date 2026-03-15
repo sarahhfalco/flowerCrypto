@@ -6,6 +6,7 @@ AUTH_ENABLED = False
 AUTH_METHOD = None
 NET = 'mobilenet_v3_small'
 TLS = False
+TLS_CIPHER_SUITES = None
 ACCURACY = 0.5
 NUM_CLIENTS = 2
 EVALUATION_SIDE = 'server'
