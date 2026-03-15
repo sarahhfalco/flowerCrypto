@@ -19,6 +19,7 @@ AUTH_METHODS = [
     "ED25519",
     "ED448",
     "ECCFROG522PP",
+    "ECCFROG255",
 ]
 NET_OPTIONS = ["custom_cnn", "resnet18", "resnet34", "tiny_cnn", "squeezenet", "mobilenet_v3_small"]
 EVALUATION_OPTIONS = ["server", "client"]
@@ -119,6 +120,7 @@ def configure():
     # Rete e altri parametri
     NET = ask_choice("Tipo di rete", NET_OPTIONS, existing.get('NET', "resnet18"))
     TLS = ask_bool("Attivo TLS?", existing.get('TLS', False))
+    TLS_CIPHER_SUITES = ask_string("Cipher suite TLS (GRPC_SSL_CIPHER_SUITES, vuoto=default)", existing.get('TLS_CIPHER_SUITES', None))
     ACCURACY = ask_accuracy("Accuratezza iniziale", existing.get('ACCURACY', 0.5))
 
     # Numero di client
@@ -138,6 +140,7 @@ def configure():
         f.write(f"AUTH_METHOD = {repr(AUTH_METHOD)}\n")
         f.write(f"NET = '{NET}'\n")
         f.write(f"TLS = {TLS}\n")
+        f.write(f"TLS_CIPHER_SUITES = {repr(TLS_CIPHER_SUITES)}\n")
         f.write(f"ACCURACY = {ACCURACY}\n")
         f.write(f"NUM_CLIENTS = {NUM_CLIENTS}\n")
         f.write(f"EVALUATION_SIDE = '{EVALUATION_SIDE}'\n")

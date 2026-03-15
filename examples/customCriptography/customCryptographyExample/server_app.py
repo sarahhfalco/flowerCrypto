@@ -16,7 +16,7 @@ from flwr.common import Context, NDArrays, Scalar, parameters_to_ndarrays
 from flwr.common.crypto.log_file import log_time
 
 from .task import get_model, get_weights, set_weights, test, get_validation_data
-from flwr.common.crypto.config_cripto import NET,EVALUATION_SIDE  # o "resnet18" se preferisci esplicitarlo
+from flwr.common.crypto.config_cripto import NET,EVALUATION_SIDE, TLS_CIPHER_SUITES  # o "resnet18" se preferisci esplicitarlo
 
 from flwr.server.history import History
 from flwr.common.crypto.config_cripto import ACCURACY
@@ -24,6 +24,12 @@ from flwr.common.crypto.config_cripto import ACCURACY
 
 
 CLIENT_METRICS_CSV = Path("logs/client_metriche_round.csv")
+
+if TLS_CIPHER_SUITES:
+    import os
+
+    os.environ["GRPC_SSL_CIPHER_SUITES"] = TLS_CIPHER_SUITES
+    log_time("TLS cipher suites impostate da config: %s", TLS_CIPHER_SUITES)
 
 
 def _append_client_metric_row(
