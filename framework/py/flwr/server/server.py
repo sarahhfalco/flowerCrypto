@@ -78,7 +78,7 @@ def _wait_for_futures_with_progress(
     If `timeout` is None, wait indefinitely but emit progress warnings.
     If `timeout` is set, stop waiting after timeout and return unfinished futures.
     """
-    poll_interval = 30.0
+    poll_interval = 10.0
     started_at = timeit.default_timer()
     remaining = set(submitted_fs)
     finished_total: set[concurrent.futures.Future] = set()
@@ -103,6 +103,7 @@ def _wait_for_futures_with_progress(
             continue
 
         # No completion within poll window: emit diagnostic warning
+        elapsed_after_wait = timeit.default_timer() - started_at
         if timeout is None:
             log(
                 WARN,
@@ -110,7 +111,7 @@ def _wait_for_futures_with_progress(
                 op_name,
                 len(remaining),
                 len(submitted_fs),
-                elapsed,
+                elapsed_after_wait,
             )
         else:
             log(
@@ -119,7 +120,7 @@ def _wait_for_futures_with_progress(
                 op_name,
                 len(remaining),
                 len(submitted_fs),
-                elapsed,
+                elapsed_after_wait,
                 timeout,
             )
 
@@ -206,14 +207,19 @@ class Server:
             log(INFO, "Evaluation returned no results (`None`)")
 
         # Run federated learning for num_rounds
+        if getattr(self.strategy, "stop_criteria", None):
+            log_time("Early stop criteria attivi: %s", getattr(self.strategy, "stop_criteria"))
+
+        effective_timeout = timeout
         if timeout is None:
             log(
                 WARN,
-                "round_timeout is None: the server can wait indefinitely for slow/hung clients",
+                "round_timeout is None: applying fallback timeout of 600s to avoid indefinite waits",
             )
             log_time(
-                "ATTENZIONE: round_timeout=None, il server può restare in attesa indefinita dei client",
+                "ATTENZIONE: round_timeout=None, applico fallback a 600s per evitare attese indefinite dei client",
             )
+            effective_timeout = 600.0
         prev_crypto_total, _ = log_file.get_crypto_totals()
         prev_encrypt_total, prev_decrypt_total = log_file.get_encrypt_decrypt_totals()
         prev_integrity_total = log_file.get_integrity_totals()
@@ -222,7 +228,11 @@ class Server:
 
         for current_round in range(1, num_rounds + 1):
             if getattr(self.strategy, "stop_triggered", False):
+                stop_reason = getattr(self.strategy, "stop_reason", None)
                 log(INFO, "Early stopping triggered at round %s, stopping server.", current_round - 1)
+                if stop_reason:
+                    log(INFO, "Early stopping reason: %s", stop_reason)
+                    log_time("Early stopping reason: %s", stop_reason)
                 log_time("Early stopping triggered at round %s, stopping server.", current_round - 1)
                 break
 
@@ -233,7 +243,7 @@ class Server:
             # Train model
             round_fit_clients = 0
             round_eval_clients = 0
-            res_fit = self.fit_round(server_round=current_round, timeout=timeout)
+            res_fit = self.fit_round(server_round=current_round, timeout=effective_timeout)
             round_fit_parallel = 0
             if res_fit is not None:
                 (
@@ -265,7 +275,7 @@ class Server:
                     log_time("Round %s Accuracy (centralized): %.4f", current_round, metrics_cen["accuracy"])
 
             # Evaluate model on a sample of available clients
-            res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
+            res_fed = self.evaluate_round(server_round=current_round, timeout=effective_timeout)
             round_eval_parallel = 0
             if res_fed is not None:
                 (

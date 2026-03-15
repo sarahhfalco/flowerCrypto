@@ -89,6 +89,7 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
 
         # estrai i dati RAW
         data = array_obj.data
+        log_file.add_transport_message(len(data))
 
         end_deser = time.perf_counter()
         total_deser_time += (end_deser - start_deser)
@@ -179,6 +180,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         tot_serial_time += (end_serial - start_serial)
 
         base_bytes = len(dataR)
+        log_file.add_transport_message(base_bytes)
 
         # --- CRITTOGRAFIA ---
         if ENCRYPTION_ENABLED:

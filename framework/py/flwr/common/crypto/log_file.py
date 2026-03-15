@@ -1,7 +1,7 @@
 import os
 from typing import List, Dict
 
-from .config_cripto import ENCRYPTION_METHOD, ENCRYPTION_ENABLED
+from .config_cripto import ENCRYPTION_METHOD, ENCRYPTION_ENABLED, TLS
 
 CSV_PATH = None
 CSV_INITIALIZED = False
@@ -15,6 +15,8 @@ TOTAL_AUTH_VERIFY_TIME = 0.0
 TOTAL_INTEGRITY_TIME = 0.0
 TOTAL_OVERHEAD_BYTES = 0
 TOTAL_PLAINTEXT_BYTES = 0
+TOTAL_TRANSPORT_BASE_BYTES = 0
+TOTAL_TRANSPORT_MSG_COUNT = 0
 OVERHEAD_BY_METHOD: Dict[str, int] = {}
 OVERHEAD_COUNT_BY_METHOD: Dict[str, int] = {}
 OVERHEAD_BY_CATEGORY: Dict[str, int] = {}
@@ -40,6 +42,8 @@ def reset_crypto_totals() -> None:
     TOTAL_INTEGRITY_TIME = 0.0
     TOTAL_OVERHEAD_BYTES = 0
     TOTAL_PLAINTEXT_BYTES = 0
+    TOTAL_TRANSPORT_BASE_BYTES = 0
+    TOTAL_TRANSPORT_MSG_COUNT = 0
     OVERHEAD_BY_METHOD = {}
     OVERHEAD_COUNT_BY_METHOD = {}
     OVERHEAD_BY_CATEGORY = {}
@@ -106,6 +110,61 @@ def get_auth_sign_verify_totals() -> tuple[float, float]:
     return TOTAL_AUTH_SIGN_TIME, TOTAL_AUTH_VERIFY_TIME
 
 
+def add_transport_message(base_bytes: int) -> None:
+    """Accumulate transport-level message stats for TLS overhead estimation."""
+    global TOTAL_TRANSPORT_BASE_BYTES, TOTAL_TRANSPORT_MSG_COUNT
+    TOTAL_TRANSPORT_BASE_BYTES += max(base_bytes, 0)
+    TOTAL_TRANSPORT_MSG_COUNT += 1
+
+
+def _tls_record_overhead_bytes(cipher_suite: str) -> int:
+    """Estimated per-record TLS overhead (header+auth tag/nonce), in bytes."""
+    suite = cipher_suite.upper()
+    # TLS 1.3 AEAD records: 5-byte header + 16-byte tag + 1-byte inner type
+    if "TLS_AES_" in suite or "TLS_CHACHA20_" in suite:
+        return 22
+    # TLS 1.2 GCM: 5-byte header + 8-byte explicit nonce + 16-byte tag
+    if "GCM" in suite:
+        return 29
+    # TLS 1.2 CBC/HMAC (approximate, depends on MAC/padding)
+    return 45
+
+
+def _get_tls_cipher_suites() -> list[str]:
+    configured = os.getenv("GRPC_SSL_CIPHER_SUITES", "").strip()
+    if configured:
+        return [item.strip() for item in configured.split(":") if item.strip()]
+    return ["default(grpc-openssl)"]
+
+
+def build_tls_report() -> List[str]:
+    """Build TLS/cipher-suite report and estimated TLS overhead."""
+    if not TLS:
+        return ["TLS overhead: TLS disabilitato (nessun overhead TLS stimato)."]
+
+    suites = _get_tls_cipher_suites()
+    suites_display = ", ".join(suites)
+    reference_suite = suites[0]
+    per_record = _tls_record_overhead_bytes(reference_suite)
+
+    total_tls_overhead = TOTAL_TRANSPORT_MSG_COUNT * per_record
+    impact = (
+        (total_tls_overhead / TOTAL_TRANSPORT_BASE_BYTES * 100.0)
+        if TOTAL_TRANSPORT_BASE_BYTES > 0
+        else 0.0
+    )
+
+    return [
+        f"TLS attivo: sì | Cipher suite(s): {suites_display}",
+        (
+            "Overhead TLS stimato: "
+            f"{total_tls_overhead} B su {TOTAL_TRANSPORT_BASE_BYTES} B "
+            f"({impact:.2f}%) | medio={per_record} B/msg "
+            f"(stima per record da suite: {reference_suite})"
+        ),
+    ]
+
+
 def add_overhead(
     method: str,
     category: str,
@@ -132,10 +191,12 @@ def get_overhead_totals() -> tuple[int, int]:
 
 
 def build_overhead_report() -> List[str]:
-    if not OVERHEAD_BY_METHOD:
-        return ["Nessun dato di overhead disponibile."]
-
     lines = []
+    if not OVERHEAD_BY_METHOD:
+        lines.append("Nessun dato di overhead disponibile.")
+        lines.extend(build_tls_report())
+        return lines
+
     total_overhead, total_plaintext = get_overhead_totals()
     total_impact = (
         (total_overhead / total_plaintext * 100.0)
@@ -170,6 +231,7 @@ def build_overhead_report() -> List[str]:
                 avg=avg,
             )
         )
+    lines.extend(build_tls_report())
     return lines
 
 ROUND_SUMMARIES: List[Dict[str, float]] = []
