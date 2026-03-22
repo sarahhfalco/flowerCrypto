@@ -225,6 +225,7 @@ class Server:
         prev_integrity_total = log_file.get_integrity_totals()
         prev_auth_total = log_file.get_auth_totals()
         prev_auth_sign_total, prev_auth_verify_total = log_file.get_auth_sign_verify_totals()
+        total_training_time = 0.0
 
         for current_round in range(1, num_rounds + 1):
             if getattr(self.strategy, "stop_triggered", False):
@@ -243,7 +244,10 @@ class Server:
             # Train model
             round_fit_clients = 0
             round_eval_clients = 0
+            fit_start = timeit.default_timer()
             res_fit = self.fit_round(server_round=current_round, timeout=effective_timeout)
+            round_training_time = timeit.default_timer() - fit_start
+            total_training_time += round_training_time
             round_fit_parallel = 0
             if res_fit is not None:
                 (
@@ -349,6 +353,7 @@ class Server:
                 "parallel_fit": float(round_fit_parallel),
                 "parallel_eval": float(round_eval_parallel),
                 "parallel_factor": float(parallel_factor),
+                "training_time": round_training_time,
                 "without_crypto": without_crypto,
             })
 
@@ -376,6 +381,10 @@ class Server:
         end_time = timeit.default_timer()
 
         elapsed= end_time - start_time
+        history.add_metrics_centralized(
+            server_round=0,
+            metrics={"total_training_time": total_training_time},
+        )
         return history, elapsed
 
     def evaluate_round(
@@ -783,11 +792,21 @@ def run_fl(
     if executed_rounds == 0:
         executed_rounds = config.num_rounds
 
+    total_training_time = sum(
+        summary.get("training_time", 0.0) for summary in log_file.get_round_summaries()
+    )
+    remaining_operations_time = max(elapsed_time - total_training_time, 0.0)
+
     log(INFO, "Run finished %s round(s) in %.2fs", executed_rounds, elapsed_time)
     log_time(
         "Run finished %s round(s) in %.2fs (tempo wall-clock totale, include training+rete+auth/crypto)",
         executed_rounds,
         elapsed_time,
+    )
+    log_time(
+        "Tempo totale al netto dell'addestramento: %.2f s (training sottratto: %.2f s)",
+        remaining_operations_time,
+        total_training_time,
     )
     total_crypto_time_cumulative, total_serial_time = log_file.get_crypto_totals()
     total_integrity_time = log_file.get_integrity_totals()
