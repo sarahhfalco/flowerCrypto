@@ -272,8 +272,8 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902
         else:
             assert len(response.messages_list) == 0
             assert len(response.message_object_trees) == 0
-            # Ins message was deleted
-            assert self.state.num_message_ins() == 0
+            # Ins message is kept for a future pull retry
+            assert self.state.num_message_ins() == 1
 
     def test_successful_get_run_if_running(self) -> None:
         """Test `GetRun` success."""
@@ -411,7 +411,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902
         obj = ConfigRecord({"a": 123, "b": [4, 5, 6]})
         obj_b = obj.deflate()
 
-        # Push valid object but it hasn't been pre-registered
+        # Push valid object without pre-registration
         req = PushObjectRequest(
             node=Node(node_id=node_id),
             run_id=run_id,
@@ -420,8 +420,8 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902
         )
         res: PushObjectResponse = self._push_object(request=req)
 
-        # Assert: object not inserted
-        assert not res.stored
+        # Assert: object inserted via fallback pre-registration
+        assert res.stored
 
         # Push valid object but its hash doesnt match the one passed in the request
         # Preregister under a different object-id
