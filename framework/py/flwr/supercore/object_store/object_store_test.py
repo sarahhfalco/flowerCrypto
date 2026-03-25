@@ -25,7 +25,7 @@ from flwr.common.inflatable_test import CustomDataClass
 from flwr.proto.message_pb2 import ObjectTree  # pylint: disable=E0611
 
 from .in_memory_object_store import InMemoryObjectStore
-from .object_store import ObjectStore
+from .object_store import NoObjectInStoreError, ObjectStore
 
 
 class ObjectStoreTest(unittest.TestCase):
@@ -190,10 +190,8 @@ class ObjectStoreTest(unittest.TestCase):
         object_id = get_object_id(object_content)
 
         # Execute
-        object_store.put(object_id, object_content)
-
-        # Assert
-        self.assertEqual(object_store.get(object_id), object_content)
+        with self.assertRaises(NoObjectInStoreError):
+            object_store.put(object_id, object_content)
 
     def test_preregister(self) -> None:
         """Test preregister functionality."""
