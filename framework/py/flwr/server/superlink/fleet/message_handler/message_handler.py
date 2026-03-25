@@ -19,10 +19,7 @@ from typing import Optional
 
 from flwr.common import Message, log
 from flwr.common.constant import Status
-from flwr.common.inflatable import (
-    UnexpectedObjectContentError,
-    get_object_children_ids_from_object_content,
-)
+from flwr.common.inflatable import UnexpectedObjectContentError
 from flwr.common.serde import (
     fab_to_proto,
     message_from_proto,
@@ -49,7 +46,6 @@ from flwr.proto.heartbeat_pb2 import (  # pylint: disable=E0611
 from flwr.proto.message_pb2 import (  # pylint: disable=E0611
     ConfirmMessageReceivedRequest,
     ConfirmMessageReceivedResponse,
-    ObjectTree,
     PullObjectRequest,
     PullObjectResponse,
     PushObjectRequest,
@@ -235,24 +231,7 @@ def push_object(
     try:
         store.put(request.object_id, request.object_content)
         stored = True
-    except NoObjectInStoreError:
-        # Fallback for out-of-order delivery under high concurrency.
-        object_tree = ObjectTree(
-            object_id=request.object_id,
-            children=[
-                ObjectTree(object_id=child_id)
-                for child_id in get_object_children_ids_from_object_content(
-                    request.object_content
-                )
-            ],
-        )
-        try:
-            store.preregister(request.run_id, object_tree)
-            store.put(request.object_id, request.object_content)
-            stored = True
-        except (NoObjectInStoreError, ValueError) as e:
-            log(ERROR, str(e))
-    except ValueError as e:
+    except (NoObjectInStoreError, ValueError) as e:
         log(ERROR, str(e))
     except UnexpectedObjectContentError as e:
         # Object content is not valid
