@@ -115,19 +115,20 @@ class InMemoryObjectStore(ObjectStore):
                     f"Object with ID '{object_id}' was not pre-registered."
                 )
 
-            # Build the object trees of all children
-            try:
-                child_trees = [
-                    self.get_object_tree(child_id)
-                    for child_id in object_entry.child_object_ids
-                ]
-            except NoObjectInStoreError as e:
-                # Raise an error if any child object is missing
-                # This indicates an integrity issue
-                raise NoObjectInStoreError(
-                    f"Object tree for object ID '{object_id}' contains missing "
-                    "children. This may indicate a corrupted object store."
-                ) from e
+            # Build the object trees of all children.
+            # If a child entry is missing (possible under out-of-order delivery),
+            # create a placeholder entry and continue.
+            child_trees: list[ObjectTree] = []
+            for child_id in object_entry.child_object_ids:
+                if child_id not in self.store:
+                    self.store[child_id] = ObjectEntry(
+                        content=b"",
+                        is_available=False,
+                        child_object_ids=[],
+                        ref_count=1,
+                        runs=set(),
+                    )
+                child_trees.append(self.get_object_tree(child_id))
 
             # Create and return the ObjectTree for the current object
             return ObjectTree(object_id=object_id, children=child_trees)
