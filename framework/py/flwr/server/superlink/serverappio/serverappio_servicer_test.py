@@ -410,8 +410,8 @@ class TestServerAppIoServicer(unittest.TestCase):  # pylint: disable=R0902, R090
         else:
             assert len(response.messages_list) == 0
             assert len(response.message_object_trees) == 0
-            # Ins message was deleted
-            assert self.state.num_message_ins() == 0
+            # Ins message is kept for a future pull retry
+            assert self.state.num_message_ins() == 1
 
     @parameterized.expand(
         [

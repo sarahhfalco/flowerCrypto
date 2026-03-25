@@ -284,8 +284,10 @@ class ServerAppIoServicer(serverappio_pb2_grpc.ServerAppIoServicer):
                 trees.append(obj_tree)
             except NoObjectInStoreError as e:
                 log(ERROR, e.message)
-                # Delete message ins from state
-                state.delete_messages(message_ins_ids={msg_object_id})
+                # Keep the message in state and retry on a future pull.
+                # This avoids dropping messages when object registration/upload
+                # arrives slightly later under high concurrency.
+                continue
 
         return PullAppMessagesResponse(
             messages_list=messages_list, message_object_trees=trees

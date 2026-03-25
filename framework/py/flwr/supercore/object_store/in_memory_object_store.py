@@ -21,6 +21,7 @@ from typing import Optional
 
 from flwr.common.inflatable import (
     get_object_id,
+    get_object_children_ids_from_object_content,
     is_valid_sha256_hash,
     iterate_object_tree,
 )
@@ -114,19 +115,20 @@ class InMemoryObjectStore(ObjectStore):
                     f"Object with ID '{object_id}' was not pre-registered."
                 )
 
-            # Build the object trees of all children
-            try:
-                child_trees = [
-                    self.get_object_tree(child_id)
-                    for child_id in object_entry.child_object_ids
-                ]
-            except NoObjectInStoreError as e:
-                # Raise an error if any child object is missing
-                # This indicates an integrity issue
-                raise NoObjectInStoreError(
-                    f"Object tree for object ID '{object_id}' contains missing "
-                    "children. This may indicate a corrupted object store."
-                ) from e
+            # Build the object trees of all children.
+            # If a child entry is missing (possible under out-of-order delivery),
+            # create a placeholder entry and continue.
+            child_trees: list[ObjectTree] = []
+            for child_id in object_entry.child_object_ids:
+                if child_id not in self.store:
+                    self.store[child_id] = ObjectEntry(
+                        content=b"",
+                        is_available=False,
+                        child_object_ids=[],
+                        ref_count=1,
+                        runs=set(),
+                    )
+                child_trees.append(self.get_object_tree(child_id))
 
             # Create and return the ObjectTree for the current object
             return ObjectTree(object_id=object_id, children=child_trees)
@@ -142,12 +144,31 @@ class InMemoryObjectStore(ObjectStore):
             # Validate object content
             validate_object_content(content=object_content)
 
+        child_object_ids = get_object_children_ids_from_object_content(object_content)
+
         with self.lock_store:
-            # Only allow adding the object if it has been preregistered
+            # If the object was not preregistered (e.g. out-of-order delivery),
+            # lazily register it together with placeholder entries for direct
+            # children inferred from object content.
             if object_id not in self.store:
-                raise NoObjectInStoreError(
-                    f"Object with ID '{object_id}' was not pre-registered."
+                self.store[object_id] = ObjectEntry(
+                    content=object_content,
+                    is_available=True,
+                    child_object_ids=child_object_ids,
+                    ref_count=0,
+                    runs=set(),
                 )
+                for child_id in child_object_ids:
+                    if child_id not in self.store:
+                        self.store[child_id] = ObjectEntry(
+                            content=b"",
+                            is_available=False,
+                            child_object_ids=[],
+                            ref_count=0,
+                            runs=set(),
+                        )
+                    self.store[child_id].ref_count += 1
+                return
 
             # Return if object is already present in the store
             if self.store[object_id].is_available:
