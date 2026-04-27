@@ -1,6 +1,9 @@
 """xgboost_quickstart: A Flower / XGBoost app."""
 
+from logging import INFO
+
 import xgboost as xgb
+from flwr.common import log
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner
 
@@ -49,6 +52,7 @@ def load_data(partition_id, num_clients):
     )
 
     # Reformat data to DMatrix for xgboost
+    log(INFO, "Reformatting data...")
     train_dmatrix = transform_dataset_to_dmatrix(train_data)
     valid_dmatrix = transform_dataset_to_dmatrix(valid_data)
 

@@ -17,18 +17,17 @@
 
 import secrets
 import threading
+import time
 from bisect import bisect_right
 from collections import defaultdict
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from logging import ERROR, WARNING
 from typing import Optional
 
 from flwr.common import Context, Message, log, now
 from flwr.common.constant import (
     FLWR_APP_TOKEN_LENGTH,
-    HEARTBEAT_INTERVAL_INF,
+    HEARTBEAT_MAX_INTERVAL,
     HEARTBEAT_PATIENCE,
     MESSAGE_TTL_TOLERANCE,
     NODE_ID_NUM_BYTES,
@@ -40,10 +39,8 @@ from flwr.common.constant import (
 )
 from flwr.common.record import ConfigRecord
 from flwr.common.typing import Run, RunStatus, UserConfig
-from flwr.proto.node_pb2 import NodeInfo  # pylint: disable=E0611
 from flwr.server.superlink.linkstate.linkstate import LinkState
 from flwr.server.utils import validate_message
-from flwr.supercore.constant import NodeStatus
 
 from .utils import (
     check_node_availability_for_in_message,
@@ -72,10 +69,10 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
 
     def __init__(self) -> None:
 
-        # Map node_id to NodeInfo
-        self.nodes: dict[int, NodeInfo] = {}
-        self.node_public_key_to_node_id: dict[bytes, int] = {}
-        self.owner_to_node_ids: dict[str, set[int]] = {}  # Quick lookup
+        # Map node_id to (online_until, heartbeat_interval)
+        self.node_ids: dict[int, tuple[float, float]] = {}
+        self.public_key_to_node_id: dict[bytes, int] = {}
+        self.node_id_to_public_key: dict[int, bytes] = {}
 
         # Map run_id to RunRecord
         self.run_ids: dict[int, RunRecord] = {}
@@ -117,11 +114,7 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
             )
             return None
         # Validate destination node ID
-        dst_node = self.nodes.get(message.metadata.dst_node_id)
-        if dst_node is None or dst_node.status not in [
-            NodeStatus.ONLINE,
-            NodeStatus.OFFLINE,
-        ]:
+        if message.metadata.dst_node_id not in self.node_ids:
             log(
                 ERROR,
                 "Invalid destination node ID for Message: %s",
@@ -143,7 +136,7 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
 
         # Find Message for node_id that were not delivered yet
         message_ins_list: list[Message] = []
-        current_time = now().timestamp()
+        current_time = time.time()
         with self.lock:
             for _, msg_ins in self.message_ins_store.items():
                 if (
@@ -197,7 +190,7 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
                 return None
 
             ins_metadata = msg_ins.metadata
-            if ins_metadata.created_at + ins_metadata.ttl <= now().timestamp():
+            if ins_metadata.created_at + ins_metadata.ttl <= time.time():
                 log(
                     ERROR,
                     "Failed to store Message: the message it is replying to "
@@ -245,7 +238,7 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
         ret: dict[str, Message] = {}
 
         with self.lock:
-            current = now().timestamp()
+            current = time.time()
 
             # Verify Message IDs
             ret = verify_message_ids(
@@ -263,10 +256,9 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
                 inquired_in_message_ids=message_ids,
                 found_in_message_dict=self.message_ins_store,
                 node_id_to_online_until={
-                    node_id: self.nodes[node_id].online_until
+                    node_id: self.node_ids[node_id][0]
                     for node_id in dst_node_ids
-                    if node_id in self.nodes
-                    and self.nodes[node_id].status != NodeStatus.UNREGISTERED
+                    if node_id in self.node_ids
                 },
                 current_time=current,
             )
@@ -338,9 +330,7 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
         """
         return len(self.message_res_store)
 
-    def create_node(
-        self, owner_aid: str, public_key: bytes, heartbeat_interval: float
-    ) -> int:
+    def create_node(self, heartbeat_interval: float) -> int:
         """Create, store in the link state, and return `node_id`."""
         # Sample a random int64 as node_id
         node_id = generate_rand_int_from_bytes(
@@ -348,88 +338,28 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
         )
 
         with self.lock:
-            if node_id in self.nodes:
+            if node_id in self.node_ids:
                 log(ERROR, "Unexpected node registration failure.")
                 return 0
-            if public_key in self.node_public_key_to_node_id:
-                raise ValueError("Public key already in use")
 
-            # The node is not activated upon creation
-            self.nodes[node_id] = NodeInfo(
-                node_id=node_id,
-                owner_aid=owner_aid,
-                status=NodeStatus.REGISTERED,
-                registered_at=now().isoformat(),
-                last_activated_at=None,
-                last_deactivated_at=None,
-                unregistered_at=None,
-                online_until=None,
-                heartbeat_interval=heartbeat_interval,
-                public_key=public_key,
+            # Mark the node online until time.time() + heartbeat_interval
+            self.node_ids[node_id] = (
+                time.time() + heartbeat_interval,
+                heartbeat_interval,
             )
-            self.node_public_key_to_node_id[public_key] = node_id
-            self.owner_to_node_ids.setdefault(owner_aid, set()).add(node_id)
             return node_id
 
-    def delete_node(self, owner_aid: str, node_id: int) -> None:
+    def delete_node(self, node_id: int) -> None:
         """Delete a node."""
         with self.lock:
-            if (
-                not (node := self.nodes.get(node_id))
-                or node.status == NodeStatus.UNREGISTERED
-                or owner_aid != self.nodes[node_id].owner_aid
-            ):
-                raise ValueError(
-                    f"Node ID {node_id} already unregistered, not found or "
-                    "the request was unauthorized."
-                )
+            if node_id not in self.node_ids:
+                raise ValueError(f"Node {node_id} not found")
 
-            node.status = NodeStatus.UNREGISTERED
-            current = now()
-            node.unregistered_at = current.isoformat()
-            # Set online_until to current timestamp on deletion, if it is in the future
-            node.online_until = min(node.online_until, current.timestamp())
+            # Remove node ID <> public key mappings
+            if pk := self.node_id_to_public_key.pop(node_id, None):
+                del self.public_key_to_node_id[pk]
 
-    def activate_node(self, node_id: int, heartbeat_interval: float) -> bool:
-        """Activate the node with the specified `node_id`."""
-        with self.lock:
-            self._check_and_tag_offline_nodes(node_ids=[node_id])
-
-            # Check if the node exists
-            if not (node := self.nodes.get(node_id)):
-                return False
-
-            # Only activate if the node is currently registered or offline
-            current_dt = now()
-            if node.status in (NodeStatus.REGISTERED, NodeStatus.OFFLINE):
-                node.status = NodeStatus.ONLINE
-                node.last_activated_at = current_dt.isoformat()
-                node.online_until = (
-                    current_dt.timestamp() + HEARTBEAT_PATIENCE * heartbeat_interval
-                )
-                node.heartbeat_interval = heartbeat_interval
-                return True
-            return False
-
-    def deactivate_node(self, node_id: int) -> bool:
-        """Deactivate the node with the specified `node_id`."""
-        with self.lock:
-            self._check_and_tag_offline_nodes(node_ids=[node_id])
-
-            # Check if the node exists
-            if not (node := self.nodes.get(node_id)):
-                return False
-
-            # Only deactivate if the node is currently online
-            current_dt = now()
-            if node.status == NodeStatus.ONLINE:
-                node.status = NodeStatus.OFFLINE
-                node.last_deactivated_at = current_dt.isoformat()
-
-                # Set online_until to current timestamp
-                node.online_until = current_dt.timestamp()
-                return True
-            return False
+            del self.node_ids[node_id]
 
     def get_nodes(self, run_id: int) -> set[int]:
         """Return all available nodes.
@@ -442,70 +372,36 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
         with self.lock:
             if run_id not in self.run_ids:
                 return set()
+            current_time = time.time()
             return {
-                node.node_id
-                for node in self.get_node_info(statuses=[NodeStatus.ONLINE])
+                node_id
+                for node_id, (online_until, _) in self.node_ids.items()
+                if online_until > current_time
             }
 
-    def get_node_info(
-        self,
-        *,
-        node_ids: Optional[Sequence[int]] = None,
-        owner_aids: Optional[Sequence[str]] = None,
-        statuses: Optional[Sequence[str]] = None,
-    ) -> Sequence[NodeInfo]:
-        """Retrieve information about nodes based on the specified filters."""
+    def set_node_public_key(self, node_id: int, public_key: bytes) -> None:
+        """Set `public_key` for the specified `node_id`."""
         with self.lock:
-            self._check_and_tag_offline_nodes()
-            result = []
-            for node_id in self.nodes.keys() if node_ids is None else node_ids:
-                if (node := self.nodes.get(node_id)) is None:
-                    continue
-                if owner_aids is not None and node.owner_aid not in owner_aids:
-                    continue
-                if statuses is not None and node.status not in statuses:
-                    continue
-                result.append(node)
-            return result
+            if node_id not in self.node_ids:
+                raise ValueError(f"Node {node_id} not found")
 
-    def _check_and_tag_offline_nodes(
-        self, node_ids: Optional[list[int]] = None
-    ) -> None:
-        with self.lock:
-            # Set all nodes of "online" status to "offline" if they've offline
-            current_ts = now().timestamp()
-            for node_id in node_ids or self.nodes.keys():
-                if (node := self.nodes.get(node_id)) is None:
-                    continue
-                if node.status == NodeStatus.ONLINE:
-                    if node.online_until <= current_ts:
-                        node.status = NodeStatus.OFFLINE
-                        node.last_deactivated_at = datetime.fromtimestamp(
-                            node.online_until, tz=timezone.utc
-                        ).isoformat()
+            if public_key in self.public_key_to_node_id:
+                raise ValueError("Public key already in use")
 
-    def get_node_public_key(self, node_id: int) -> bytes:
+            self.public_key_to_node_id[public_key] = node_id
+            self.node_id_to_public_key[node_id] = public_key
+
+    def get_node_public_key(self, node_id: int) -> Optional[bytes]:
         """Get `public_key` for the specified `node_id`."""
         with self.lock:
-            if (
-                node := self.nodes.get(node_id)
-            ) is None or node.status == NodeStatus.UNREGISTERED:
-                raise ValueError(f"Node ID {node_id} not found")
-            return node.public_key
+            if node_id not in self.node_ids:
+                raise ValueError(f"Node {node_id} not found")
 
-    def get_node_id_by_public_key(self, public_key: bytes) -> Optional[int]:
-        """Get `node_id` for the specified `public_key` if it exists and is not
-        deleted."""
-        with self.lock:
-            node_id = self.node_public_key_to_node_id.get(public_key)
+            return self.node_id_to_public_key.get(node_id)
 
-            if node_id is None:
-                return None
-
-            node_info = self.nodes[node_id]
-            if node_info.status == NodeStatus.UNREGISTERED:
-                return None
-            return node_id
+    def get_node_id(self, node_public_key: bytes) -> Optional[int]:
+        """Retrieve stored `node_id` filtered by `node_public_keys`."""
+        return self.public_key_to_node_id.get(node_public_key)
 
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def create_run(
@@ -552,6 +448,26 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
                 return run_id
         log(ERROR, "Unexpected run creation failure.")
         return 0
+
+    def clear_supernode_auth_keys(self) -> None:
+        """Clear stored `node_public_keys` in the link state if any."""
+        with self.lock:
+            self.node_public_keys.clear()
+
+    def store_node_public_keys(self, public_keys: set[bytes]) -> None:
+        """Store a set of `node_public_keys` in the link state."""
+        with self.lock:
+            self.node_public_keys.update(public_keys)
+
+    def store_node_public_key(self, public_key: bytes) -> None:
+        """Store a `node_public_key` in the link state."""
+        with self.lock:
+            self.node_public_keys.add(public_key)
+
+    def get_node_public_keys(self) -> set[bytes]:
+        """Retrieve all currently stored `node_public_keys` as a set."""
+        with self.lock:
+            return self.node_public_keys.copy()
 
     def get_run_ids(self, flwr_aid: Optional[str]) -> set[int]:
         """Retrieve all run IDs if `flwr_aid` is not specified.
@@ -645,7 +561,7 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
             current = now()
             run_record = self.run_ids[run_id]
             if new_status.status in (Status.STARTING, Status.RUNNING):
-                run_record.heartbeat_interval = HEARTBEAT_INTERVAL_INF
+                run_record.heartbeat_interval = HEARTBEAT_MAX_INTERVAL
                 run_record.active_until = (
                     current.timestamp() + run_record.heartbeat_interval
                 )
@@ -692,23 +608,13 @@ class InMemoryLinkState(LinkState):  # pylint: disable=R0902,R0904
         the node is marked as offline.
         """
         with self.lock:
-            if (
-                node := self.nodes.get(node_id)
-            ) and node.status != NodeStatus.UNREGISTERED:
-                current_dt = now()
-
-                # Set timestamp if the status changes
-                if node.status != NodeStatus.ONLINE:  # offline or registered
-                    node.status = NodeStatus.ONLINE
-                    node.last_activated_at = current_dt.isoformat()
-
-                # Refresh `online_until` and `heartbeat_interval`
-                node.online_until = (
-                    current_dt.timestamp() + HEARTBEAT_PATIENCE * heartbeat_interval
+            if node_id in self.node_ids:
+                self.node_ids[node_id] = (
+                    time.time() + HEARTBEAT_PATIENCE * heartbeat_interval,
+                    heartbeat_interval,
                 )
-                node.heartbeat_interval = heartbeat_interval
                 return True
-            return False
+        return False
 
     def acknowledge_app_heartbeat(self, run_id: int, heartbeat_interval: float) -> bool:
         """Acknowledge a heartbeat received from a ServerApp for a given run.

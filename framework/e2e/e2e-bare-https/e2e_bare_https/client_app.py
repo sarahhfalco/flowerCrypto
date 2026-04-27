@@ -2,9 +2,8 @@ from pathlib import Path
 
 import numpy as np
 
-from flwr.app import Context
-from flwr.client import NumPyClient, start_client
-from flwr.clientapp import ClientApp
+from flwr.client import ClientApp, NumPyClient, start_client
+from flwr.common import Context
 
 model_params = np.array([1])
 objective = 5

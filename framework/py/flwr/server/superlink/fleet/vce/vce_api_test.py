@@ -24,9 +24,8 @@ from time import sleep
 from typing import Optional
 from unittest import TestCase
 
-from flwr.client import Client, NumPyClient
-from flwr.clientapp import ClientApp
-from flwr.clientapp.client_app import LoadClientAppError
+from flwr.client import Client, ClientApp, NumPyClient
+from flwr.client.client_app import LoadClientAppError
 from flwr.common import (
     DEFAULT_TTL,
     Config,
@@ -50,7 +49,6 @@ from flwr.server.superlink.fleet.vce.vce_api import (
 )
 from flwr.server.superlink.linkstate import InMemoryLinkState, LinkStateFactory
 from flwr.server.superlink.linkstate.in_memory_linkstate import RunRecord
-from flwr.supercore.constant import FLWR_IN_MEMORY_DB_NAME
 
 
 class DummyClient(NumPyClient):
@@ -92,7 +90,7 @@ def init_state_factory_nodes_mapping(
     """Instatiate StateFactory, register nodes and pre-insert messages in the state."""
     # Register a state and a run_id in it
     run_id = 1234
-    state_factory = LinkStateFactory(FLWR_IN_MEMORY_DB_NAME)
+    state_factory = LinkStateFactory(":flwr-in-memory-state:")
 
     # Register a few nodes
     nodes_mapping = _register_nodes(num_nodes=num_nodes, state_factory=state_factory)

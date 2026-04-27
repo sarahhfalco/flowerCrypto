@@ -17,15 +17,12 @@
 
 from flwr.common.version import package_version as _package_version
 
-from . import app, client, clientapp, common, server, serverapp, simulation
+from . import client, common, server, simulation
 
 __all__ = [
-    "app",
     "client",
-    "clientapp",
     "common",
     "server",
-    "serverapp",
     "simulation",
 ]
 

@@ -2,9 +2,8 @@ from datetime import datetime
 
 import numpy as np
 
-from flwr.app import ConfigRecord, Context, RecordDict
-from flwr.client import NumPyClient, start_client
-from flwr.clientapp import ClientApp
+from flwr.client import ClientApp, NumPyClient, start_client
+from flwr.common import ConfigRecord, Context, RecordDict
 
 SUBSET_SIZE = 1000
 STATE_VAR = "timestamp"

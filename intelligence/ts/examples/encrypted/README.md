@@ -18,8 +18,9 @@ You can then install the project dependencies with:
 npm i
 ```
 
-> [!WARNING]
-> In order to run this example, you need to update `fi.apiKey = 'REPLACE_HERE'` inside `src/index.ts` with a valid API key (if you don't have one, you can register [here](https://flower.ai/intelligence/)).
+```{warning}
+In order to run this example, you need to update `fi.apiKey = 'REPLACE_HERE'` inside `src/index.ts` with a valid API key (if you don't have one, you can register [here](https://flower.ai/intelligence/)).
+```
 
 ## Build
 

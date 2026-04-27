@@ -18,7 +18,7 @@ import { vi } from 'vitest';
 vi.mock('./constants', () => ({
   DEFAULT_MODEL: 'meta/llama3.2-1b/instruct-fp16',
   REMOTE_URL: process.env.FI_DEV_REMOTE_URL,
-  VERSION: '0.2.6',
+  VERSION: '0.2.1',
   SDK: 'TS',
   ALLOWED_ROLES: ['system', 'assistant', 'user'],
 }));
@@ -174,7 +174,7 @@ describe('FlowerIntelligence', () => {
       };
 
       const data = await fi.chat({
-        model: 'meta/llama3.2-1b/instruct-fp16',
+        model: 'mistral/small-3.1-24b/instruct-q4',
         messages: [
           {
             role: 'user',

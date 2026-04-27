@@ -3,11 +3,5 @@ html, body{
 }
 
 .mermaid {
-    background: transparent;
-}
-
-img.only-light, img.only-dark {
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
+    background: #f8f8f8
 }

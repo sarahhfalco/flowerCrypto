@@ -3,7 +3,6 @@
 from typing import List
 
 from flwr.common.typing import Parameters
-
 from fedrag.retriever import Retriever
 
 

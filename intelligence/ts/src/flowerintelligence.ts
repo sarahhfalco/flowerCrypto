@@ -15,6 +15,7 @@
 
 import { Engine } from './engines/engine';
 import { RemoteEngine } from './engines/remoteEngine';
+import { TransformersEngine } from './engines/transformersEngine';
 import {
   ChatOptions,
   ChatResponseResult,
@@ -26,6 +27,7 @@ import {
   Progress,
   Result,
 } from './typing';
+import { WebllmEngine } from './engines/webllmEngine';
 import { ALLOWED_ROLES, DEFAULT_MODEL } from './constants';
 import { isNode } from './env';
 
@@ -40,19 +42,7 @@ export class FlowerIntelligence {
   static #apiKey?: string;
 
   #remoteEngine?: RemoteEngine;
-  #localEngineLoaders: (() => Promise<Engine>)[] = isNode
-    ? [
-        async () => {
-          const { TransformersEngine } = await import('./engines/transformersEngine');
-          return new TransformersEngine();
-        },
-      ]
-    : [
-        async () => {
-          const { WebllmEngine } = await import('./engines/webllmEngine');
-          return new WebllmEngine();
-        },
-      ];
+  #availableLocalEngines: Engine[] = isNode ? [new TransformersEngine()] : [new WebllmEngine()];
 
   /**
    * Get the initialized FlowerIntelligence instance.
@@ -218,7 +208,6 @@ export class FlowerIntelligence {
       options.stream,
       options.onStreamEvent,
       options.tools,
-      options.toolChoice,
       options.encrypt,
       options.signal
     );
@@ -248,8 +237,7 @@ export class FlowerIntelligence {
 
   private async chooseLocalEngine(modelId: string): Promise<Result<Engine>> {
     const results = await Promise.all(
-      this.#localEngineLoaders.map(async (load) => {
-        const engine = await load();
+      this.#availableLocalEngines.map(async (engine) => {
         const supportResult = await engine.isSupported(modelId);
         return { engine, supportResult };
       })

@@ -10,6 +10,7 @@ from flwr_datasets.partitioner import IidPartitioner
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 
+
 fds = None  # Cache FederatedDataset
 
 

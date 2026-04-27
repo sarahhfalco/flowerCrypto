@@ -2,9 +2,8 @@ import os
 
 import tensorflow as tf
 
-from flwr.app import Context
-from flwr.client import NumPyClient, start_client
-from flwr.clientapp import ClientApp
+from flwr.client import ClientApp, NumPyClient, start_client
+from flwr.common import Context
 
 SUBSET_SIZE = 1000
 

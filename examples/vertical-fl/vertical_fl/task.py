@@ -1,11 +1,12 @@
-from logging import WARN
 from pathlib import Path
-
+from logging import WARN
+import torch.nn as nn
 import numpy as np
 import pandas as pd
 import torch.nn as nn
-from datasets import Dataset
 from flwr.common.logger import log
+
+from datasets import Dataset
 from flwr_datasets.partitioner import IidPartitioner
 
 NUM_VERTICAL_SPLITS = 3

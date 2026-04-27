@@ -1,19 +1,21 @@
 """huggingface_example: A Flower / Hugging Face app."""
 
 from typing import Any
+from collections import OrderedDict
 
 import torch
-from datasets.utils.logging import disable_progress_bar
 from evaluate import load as load_metric
-from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import (
-    AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
+    AutoModelForSequenceClassification,
 )
+from datasets.utils.logging import disable_progress_bar
+from flwr_datasets import FederatedDataset
+from flwr_datasets.partitioner import IidPartitioner
+
 
 disable_progress_bar()
 fds = None  # Cache FederatedDataset
@@ -63,7 +65,17 @@ def get_model(model_name):
     return AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
 
 
-def train_fn(net, trainloader, epochs, device) -> None:
+def get_params(model):
+    return [val.cpu().numpy() for _, val in model.state_dict().items()]
+
+
+def set_params(model, parameters) -> None:
+    params_dict = zip(model.state_dict().keys(), parameters)
+    state_dict = OrderedDict({k: torch.Tensor(v) for k, v in params_dict})
+    model.load_state_dict(state_dict, strict=True)
+
+
+def train(net, trainloader, epochs, device) -> None:
     optimizer = AdamW(net.parameters(), lr=5e-5)
     net.train()
     for _ in range(epochs):
@@ -76,7 +88,7 @@ def train_fn(net, trainloader, epochs, device) -> None:
             optimizer.zero_grad()
 
 
-def test_fn(net, testloader, device) -> tuple[Any | float, Any]:
+def test(net, testloader, device) -> tuple[Any | float, Any]:
     metric = load_metric("accuracy")
     loss = 0
     net.eval()

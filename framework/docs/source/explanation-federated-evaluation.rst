@@ -20,11 +20,9 @@ current global model parameters as input and return evaluation results:
 
 .. code-block:: python
 
-    from flwr.app import Context
-    from flwr.common import NDArrays, Scalar
-    from flwr.server import ServerAppComponents, ServerConfig
+    from flwr.common import Context, NDArrays, Scalar
+    from flwr.server import ServerApp, ServerAppComponents, ServerConfig
     from flwr.server.strategy import FedAvg
-    from flwr.serverapp import ServerApp
 
     from typing import Dict, Optional, Tuple
 
@@ -145,10 +143,9 @@ the following arguments:
 
 .. code-block:: python
 
-    from flwr.app import Context
-    from flwr.server import ServerAppComponents, ServerConfig
+    from flwr.common import Context
+    from flwr.server import ServerApp, ServerAppComponents, ServerConfig
     from flwr.server.strategy import FedAvg
-    from flwr.serverapp import ServerApp
 
 
     def evaluate_config(server_round: int):

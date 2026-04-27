@@ -23,6 +23,7 @@ address_arg = (
     if use_sim
     else SERVERAPPIO_API_DEFAULT_CLIENT_ADDRESS
 )
+executor_arg = f"flwr.superexec.{'simulation' if use_sim else 'deployment'}:executor"
 app_cmd = "flwr-simulation" if use_sim else "flwr-serverapp"
 
 
@@ -49,13 +50,18 @@ def add_e2e_federation() -> None:
 
 def run_superlink() -> subprocess.Popen:
     """Run the SuperLink."""
-    cmd = ["flower-superlink", "--insecure"]
-    cmd += ["--database", "tmp.db"]
-    cmd += ["--isolation", "process"]
-    if use_sim:
-        cmd += ["--simulation"]
-
-    return subprocess.Popen(cmd)
+    return subprocess.Popen(
+        [
+            "flower-superlink",
+            "--insecure",
+            "--database",
+            "tmp.db",
+            "--executor",
+            executor_arg,
+            "--isolation",
+            "process",
+        ],
+    )
 
 
 def run_superexec() -> subprocess.Popen:

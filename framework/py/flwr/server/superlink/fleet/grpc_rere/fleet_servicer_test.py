@@ -24,7 +24,6 @@ from parameterized import parameterized
 from flwr.common import ConfigRecord
 from flwr.common.constant import (
     FLEET_API_GRPC_RERE_DEFAULT_ADDRESS,
-    NOOP_FLWR_AID,
     SUPERLINK_NODE_ID,
     Status,
 )
@@ -39,18 +38,10 @@ from flwr.common.serde import message_from_proto
 from flwr.common.typing import RunStatus
 from flwr.proto.fab_pb2 import GetFabRequest, GetFabResponse  # pylint: disable=E0611
 from flwr.proto.fleet_pb2 import (  # pylint: disable=E0611
-    ActivateNodeRequest,
-    ActivateNodeResponse,
-    DeactivateNodeRequest,
-    DeactivateNodeResponse,
     PullMessagesRequest,
     PullMessagesResponse,
     PushMessagesRequest,
     PushMessagesResponse,
-    RegisterNodeFleetRequest,
-    RegisterNodeFleetResponse,
-    UnregisterNodeFleetRequest,
-    UnregisterNodeFleetResponse,
 )
 from flwr.proto.message_pb2 import (  # pylint: disable=E0611
     ConfirmMessageReceivedRequest,
@@ -70,15 +61,12 @@ from flwr.server.superlink.linkstate.linkstate_test import (
     create_res_message,
 )
 from flwr.server.superlink.utils import _STATUS_TO_MSG
-from flwr.supercore.constant import FLWR_IN_MEMORY_DB_NAME, NodeStatus
 from flwr.supercore.ffs import FfsFactory
 from flwr.supercore.object_store import ObjectStoreFactory
 
 
-class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
+class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902
     """FleetServicer tests for allowed RunStatuses."""
-
-    enable_node_auth = False
 
     def setUp(self) -> None:
         """Initialize mock stub and server interceptor."""
@@ -86,13 +74,12 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
         self.temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=R1732
         self.addCleanup(self.temp_dir.cleanup)  # Ensures cleanup after test
 
-        state_factory = LinkStateFactory(FLWR_IN_MEMORY_DB_NAME)
+        state_factory = LinkStateFactory(":flwr-in-memory-state:")
         self.state = state_factory.state()
         ffs_factory = FfsFactory(self.temp_dir.name)
         self.ffs = ffs_factory.ffs()
         objectstore_factory = ObjectStoreFactory()
         self.store = objectstore_factory.store()
-        self.node_pk = b"fake public key"
 
         self.status_to_msg = _STATUS_TO_MSG
 
@@ -101,32 +88,11 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
             state_factory,
             ffs_factory,
             objectstore_factory,
-            self.enable_node_auth,
             None,
             None,
         )
 
         self._channel = grpc.insecure_channel("localhost:9092")
-        self._register_node = self._channel.unary_unary(
-            "/flwr.proto.Fleet/RegisterNode",
-            request_serializer=RegisterNodeFleetRequest.SerializeToString,
-            response_deserializer=RegisterNodeFleetResponse.FromString,
-        )
-        self._activate_node = self._channel.unary_unary(
-            "/flwr.proto.Fleet/ActivateNode",
-            request_serializer=ActivateNodeRequest.SerializeToString,
-            response_deserializer=ActivateNodeResponse.FromString,
-        )
-        self._deactivate_node = self._channel.unary_unary(
-            "/flwr.proto.Fleet/DeactivateNode",
-            request_serializer=DeactivateNodeRequest.SerializeToString,
-            response_deserializer=DeactivateNodeResponse.FromString,
-        )
-        self._unregister_node = self._channel.unary_unary(
-            "/flwr.proto.Fleet/UnregisterNode",
-            request_serializer=UnregisterNodeFleetRequest.SerializeToString,
-            response_deserializer=UnregisterNodeFleetResponse.FromString,
-        )
         self._push_messages = self._channel.unary_unary(
             "/flwr.proto.Fleet/PushMessages",
             request_serializer=PushMessagesRequest.SerializeToString,
@@ -167,15 +133,6 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
         """Clean up grpc server."""
         self._server.stop(None)
 
-    def _create_dummy_node(self, activate: bool = True) -> int:
-        """Create a dummy node."""
-        node_id = self.state.create_node(
-            NOOP_FLWR_AID, self.node_pk, heartbeat_interval=30
-        )
-        if activate:
-            self.state.acknowledge_node_heartbeat(node_id, heartbeat_interval=30)
-        return node_id
-
     def _transition_run_status(self, run_id: int, num_transitions: int) -> None:
         if num_transitions > 0:
             _ = self.state.update_run_status(run_id, RunStatus(Status.STARTING, "", ""))
@@ -184,116 +141,10 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
         if num_transitions > 2:
             _ = self.state.update_run_status(run_id, RunStatus(Status.FINISHED, "", ""))
 
-    def test_register_node_success(self) -> None:
-        """Test `RegisterNode` success."""
-        # Prepare
-        public_key = b"test_register_public_key"
-        request = RegisterNodeFleetRequest(public_key=public_key)
-
-        # Execute: Registeration should be blocked when node authentication is enabled
-        if self.enable_node_auth:
-            with self.assertRaises(grpc.RpcError) as cm:
-                self._register_node.with_call(request=request)
-            assert cm.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-            return
-
-        # Execute: Allow registration when node authentication is disabled
-        response, call = self._register_node.with_call(request=request)
-
-        # Assert
-        assert isinstance(response, RegisterNodeFleetResponse)
-        assert grpc.StatusCode.OK == call.code()
-        # Verify node was created in state
-        node_id = self.state.get_node_id_by_public_key(public_key)
-        assert node_id is not None
-        assert node_id > 0
-        assert response.node_id == node_id
-
-    def test_activate_node_success(self) -> None:
-        """Test `ActivateNode` success."""
-        # Prepare: Register a node first
-        public_key = b"test_activate_public_key"
-        self.state.create_node(NOOP_FLWR_AID, public_key, 0)
-        request = ActivateNodeRequest(public_key=public_key, heartbeat_interval=30)
-
-        # Execute
-        response, call = self._activate_node.with_call(request=request)
-
-        # Assert
-        assert isinstance(response, ActivateNodeResponse)
-        assert grpc.StatusCode.OK == call.code()
-        assert response.node_id > 0
-        # Verify node status is ONLINE
-        node_info = self.state.get_node_info(node_ids=[response.node_id])[0]
-        assert node_info.status == NodeStatus.ONLINE
-
-    def test_activate_node_not_found(self) -> None:
-        """Test `ActivateNode` with non-existent public key."""
-        # Prepare
-        public_key = b"non_existent_public_key"
-        request = ActivateNodeRequest(public_key=public_key, heartbeat_interval=30)
-
-        # Execute and assert
-        with self.assertRaises(grpc.RpcError) as cm:
-            self._activate_node.with_call(request=request)
-        assert cm.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-
-    def test_deactivate_node_success(self) -> None:
-        """Test `DeactivateNode` success."""
-        # Prepare: Create and activate a node
-        public_key = b"test_deactivate_public_key"
-        node_id = self.state.create_node(NOOP_FLWR_AID, public_key, 30)
-        self.state.activate_node(node_id, 30)
-        request = DeactivateNodeRequest(node_id=node_id)
-
-        # Execute
-        response, call = self._deactivate_node.with_call(request=request)
-
-        # Assert
-        assert isinstance(response, DeactivateNodeResponse)
-        assert grpc.StatusCode.OK == call.code()
-        # Verify node status is OFFLINE
-        node_info = self.state.get_node_info(node_ids=[node_id])[0]
-        assert node_info.status == NodeStatus.OFFLINE
-
-    def test_deactivate_node_failure(self) -> None:
-        """Test `DeactivateNode` with invalid node_id."""
-        # Prepare: Use a non-existent node_id
-        request = DeactivateNodeRequest(node_id=99999)
-
-        # Execute and assert
-        with self.assertRaises(grpc.RpcError) as cm:
-            self._deactivate_node.with_call(request=request)
-        assert cm.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-
-    def test_unregister_node_success(self) -> None:
-        """Test `UnregisterNode` success."""
-        # Prepare: Create a node
-        public_key = b"test_unregister_public_key"
-        node_id = self.state.create_node(NOOP_FLWR_AID, public_key, 0)
-        request = UnregisterNodeFleetRequest(node_id=node_id)
-
-        # Execute: Unregistration should be blocked when node authentication is enabled
-        if self.enable_node_auth:
-            with self.assertRaises(grpc.RpcError) as cm:
-                self._unregister_node.with_call(request=request)
-            assert cm.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-            return
-
-        # Execute: Allow unregistration when node authentication is disabled
-        response, call = self._unregister_node.with_call(request=request)
-
-        # Assert
-        assert isinstance(response, UnregisterNodeFleetResponse)
-        assert grpc.StatusCode.OK == call.code()
-        # Verify node status is UNREGISTERED
-        node_info = self.state.get_node_info(node_ids=[node_id])[0]
-        assert node_info.status == NodeStatus.UNREGISTERED
-
     def test_successful_push_messages_if_running(self) -> None:
         """Test `PushMessages` success."""
         # Prepare
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
         # Transition status to running. PushMessages RPC is only allowed in
         # running status.
@@ -359,7 +210,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
     ) -> None:
         """Test `PushMessages` not successful if RunStatus is not running."""
         # Prepare
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
         self._transition_run_status(run_id, num_transitions)
 
@@ -378,7 +229,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
     ) -> None:
         """Test `PullMessages` success if objects are registered in ObjectStore."""
         # Prepare
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
 
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
         # Transition status to running. PullMessagesRequest is only
@@ -427,7 +278,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
     def test_successful_get_run_if_running(self) -> None:
         """Test `GetRun` success."""
         # Prepare
-        self._create_dummy_node()
+        self.state.create_node(heartbeat_interval=30)
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
         # Transition status to running. GetRun RPC is only allowed in running status.
         self._transition_run_status(run_id, 2)
@@ -469,7 +320,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
     def test_successful_get_fab_if_running(self) -> None:
         """Test `GetFab` success."""
         # Prepare
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         fab_content = b"content"
         fab_hash = self.ffs.put(fab_content, {"meta": "data"})
         run_id = self.state.create_run("", "", fab_hash, {}, ConfigRecord(), "")
@@ -511,7 +362,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
     def test_get_fab_not_successful_if_not_running(self, num_transitions: int) -> None:
         """Test `GetFab` not successful if RunStatus is not running."""
         # Prepare
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         fab_content = b"content"
         fab_hash = self.ffs.put(fab_content, {"meta": "data"})
         run_id = self.state.create_run("", "", fab_hash, {}, ConfigRecord(), "")
@@ -525,7 +376,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
         """Test `PushObject`."""
         # Prepare
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         obj = ConfigRecord({"a": 123, "b": [4, 5, 6]})
         obj_b = obj.deflate()
         self._transition_run_status(run_id, 2)
@@ -556,7 +407,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
 
         # Prepare
         self._transition_run_status(run_id, 2)
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         obj = ConfigRecord({"a": 123, "b": [4, 5, 6]})
         obj_b = obj.deflate()
 
@@ -594,7 +445,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
         # Prepare
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
         self._transition_run_status(run_id, 2)
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         obj = ConfigRecord({"a": 123, "b": [4, 5, 6]})
         obj_b = obj.deflate()
 
@@ -635,7 +486,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
 
         # Attempt pulling object that doesn't exist
         self._transition_run_status(run_id, 2)
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         req = PullObjectRequest(
             node=Node(node_id=node_id), run_id=run_id, object_id="1234"
         )
@@ -646,7 +497,7 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
     def test_confirm_message_received_successful(self) -> None:
         """Test `ConfirmMessageReceived` functionality."""
         # Prepare
-        node_id = self._create_dummy_node()
+        node_id = self.state.create_node(heartbeat_interval=30)
         run_id = self.state.create_run("", "", "", {}, ConfigRecord(), "")
         self._transition_run_status(run_id, 2)
 
@@ -678,9 +529,3 @@ class TestFleetServicer(unittest.TestCase):  # pylint: disable=R0902, R0904
 
         # Assert: Message is removed from ObjectStore
         assert len(self.store) == 0
-
-
-class TestFleetServicerWithNodeAuthEnabled(TestFleetServicer):
-    """FleetServicer tests for allowed RunStatuses."""
-
-    enable_node_auth = True

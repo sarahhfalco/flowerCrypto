@@ -1,5 +1,7 @@
 """fedvae: A Flower app for Federated Variational Autoencoder."""
 
+from collections import OrderedDict
+
 import torch
 import torch.nn.functional as F
 from flwr_datasets import FederatedDataset
@@ -107,7 +109,7 @@ def load_data(partition_id, num_partitions):
     return trainloader, testloader
 
 
-def trainer(net, trainloader, epochs, learning_rate, device):
+def train(net, trainloader, epochs, learning_rate, device):
     """Train the network on the training set."""
     net.to(device)  # move model to GPU if available
     optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
@@ -145,3 +147,13 @@ def generate(net, image):
     """Reproduce the input with trained VAE."""
     with torch.no_grad():
         return net.forward(image)
+
+
+def get_weights(net):
+    return [val.cpu().numpy() for _, val in net.state_dict().items()]
+
+
+def set_weights(net, parameters):
+    params_dict = zip(net.state_dict().keys(), parameters)
+    state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+    net.load_state_dict(state_dict, strict=True)

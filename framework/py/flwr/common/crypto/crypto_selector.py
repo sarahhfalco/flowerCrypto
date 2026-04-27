@@ -1,0 +1,61 @@
+from .algorithms import (
+    AES, HMAC, CHACHA_AEAD, CHACHA, AES_GCM, KOBLITZ)
+
+def encrypt(data: bytes, method: str, ecc_pubkey=None) -> bytes:
+    if method == "AES":
+        return AES.encrypt(data)
+    elif method == "HMAC":
+         return HMAC.add_hmac(data)
+    elif method == "CHACHA":
+        return CHACHA.encrypt(data)
+    elif method == "CHACHA_AEAD":
+        return CHACHA_AEAD.encrypt(data)
+    elif method == "AES_GCM":
+        return AES_GCM.encrypt(data)
+    elif KOBLITZ.is_supported_method(method):
+        raise ValueError("Le curve ellittiche sono disponibili solo per autenticazione")
+    else:
+        raise ValueError(f"Unknown encryption method: {method}")
+
+
+def decrypt(data: bytes, method: str, ecc_privkey=None) -> bytes:
+    if method == "AES":
+        return AES.decrypt(data)
+    elif method == "HMAC":
+        return HMAC.check_hmac(data)
+    elif method == "CHACHA":
+        return CHACHA.decrypt(data)
+    elif method == "CHACHA_AEAD":
+        return CHACHA_AEAD.decrypt(data)
+    elif method == "AES_GCM":
+        return AES_GCM.decrypt(data)
+    elif KOBLITZ.is_supported_method(method):
+        raise ValueError("Le curve ellittiche sono disponibili solo per autenticazione")
+    else:
+        raise ValueError(f"Unknown decryption method: {method}")
+
+
+def authenticate(data: bytes, method: str, ecc_privkey=None) -> bytes:
+    if KOBLITZ.is_supported_method(method):
+        return KOBLITZ.authenticate(data, method, ecc_privkey)
+    else:
+        raise ValueError(f"Unknown authentication method: {method}")
+
+
+def verify_authentication(data: bytes, method: str, ecc_pubkey=None) -> bytes:
+    if KOBLITZ.is_supported_method(method):
+        return KOBLITZ.verify(data, method, ecc_pubkey)
+    else:
+        raise ValueError(f"Unknown authentication method: {method}")
+
+def add_integrity(data: bytes, method: str) -> bytes:
+    if method == "HMAC":
+        return HMAC.add_hmac(data)
+    else:
+        raise ValueError(f"Unknown integrity method: {method}")
+
+def check_integrity(data: bytes, method: str) -> bytes:
+    if method == "HMAC":
+        return HMAC.check_hmac(data)
+    else:
+        raise ValueError(f"Unknown integrity method: {method}")

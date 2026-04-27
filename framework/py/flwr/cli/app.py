@@ -25,12 +25,8 @@ from .log import log
 from .login import login
 from .ls import ls
 from .new import new
-from .pull import pull
 from .run import run
 from .stop import stop
-from .supernode import ls as supernode_list
-from .supernode import register as supernode_register
-from .supernode import unregister as supernode_unregister
 
 app = typer.Typer(
     help=typer.style(
@@ -47,21 +43,9 @@ app.command()(run)
 app.command()(build)
 app.command()(install)
 app.command()(log)
-app.command("list")(ls)
-app.command(hidden=True)(ls)
+app.command()(ls)
 app.command()(stop)
 app.command()(login)
-app.command()(pull)
-
-# Create supernode command group
-supernode_app = typer.Typer(help="Manage SuperNodes")
-supernode_app.command()(supernode_register)
-supernode_app.command()(supernode_unregister)
-# Make it appear as "list"
-supernode_app.command("list")(supernode_list)
-# Hide "ls" command (left as alias)
-supernode_app.command(hidden=True)(supernode_list)
-app.add_typer(supernode_app, name="supernode")
 
 typer_click_object = get_command(app)
 

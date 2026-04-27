@@ -15,31 +15,29 @@
 """Flower command line interface `run` command."""
 
 
-import hashlib
 import io
 import json
 import subprocess
 from pathlib import Path
-from typing import Annotated, Any, Optional, cast
+from typing import Annotated, Any, Optional
 
 import typer
 from rich.console import Console
 
-from flwr.cli.build import build_fab_from_disk, get_fab_filename
-from flwr.cli.config_utils import load as load_toml
+from flwr.cli.build import build_fab, get_fab_filename
 from flwr.cli.config_utils import (
     load_and_validate,
     process_loaded_project_config,
     validate_federation_in_project_config,
 )
-from flwr.cli.constant import FEDERATION_CONFIG_HELP_MESSAGE, RUN_CONFIG_HELP_MESSAGE
+from flwr.cli.constant import FEDERATION_CONFIG_HELP_MESSAGE
 from flwr.common.config import (
     flatten_dict,
     get_metadata_from_config,
     parse_config_args,
     user_config_to_configrecord,
 )
-from flwr.common.constant import FAB_CONFIG_FILE, CliOutputFormat
+from flwr.common.constant import CliOutputFormat
 from flwr.common.logger import print_json_error, redirect_output, restore_output
 from flwr.common.serde import config_record_to_proto, fab_to_proto, user_config_to_proto
 from flwr.common.typing import Fab
@@ -47,7 +45,7 @@ from flwr.proto.control_pb2 import StartRunRequest  # pylint: disable=E0611
 from flwr.proto.control_pb2_grpc import ControlStub
 
 from ..log import start_stream
-from ..utils import flwr_cli_grpc_exc_handler, init_channel, load_cli_auth_plugin
+from ..utils import flwr_cli_grpc_exc_handler, init_channel, try_obtain_cli_auth_plugin
 
 CONN_REFRESH_PERIOD = 60  # Connection refresh period for log streaming (seconds)
 
@@ -67,7 +65,11 @@ def run(
         typer.Option(
             "--run-config",
             "-c",
-            help=RUN_CONFIG_HELP_MESSAGE,
+            help="Override run configuration values in the format:\n\n"
+            "`--run-config 'key1=value1 key2=value2' --run-config 'key3=value3'`\n\n"
+            "Values can be of any type supported in TOML, such as bool, int, "
+            "float, or string. Ensure that the keys (`key1`, `key2`, `key3` "
+            "in this example) exist in `pyproject.toml` for proper overriding.",
         ),
     ] = None,
     federation_config_overrides: Annotated[
@@ -150,16 +152,14 @@ def _run_with_control_api(
 ) -> None:
     channel = None
     try:
-        auth_plugin = load_cli_auth_plugin(app, federation, federation_config)
+        auth_plugin = try_obtain_cli_auth_plugin(app, federation, federation_config)
         channel = init_channel(app, federation_config, auth_plugin)
         stub = ControlStub(channel)
 
-        fab_bytes = build_fab_from_disk(app)
-        fab_hash = hashlib.sha256(fab_bytes).hexdigest()
-        config = cast(dict[str, Any], load_toml(app / FAB_CONFIG_FILE))
+        fab_bytes, fab_hash, config = build_fab(app)
         fab_id, fab_version = get_metadata_from_config(config)
 
-        fab = Fab(fab_hash, fab_bytes, {})
+        fab = Fab(fab_hash, fab_bytes)
 
         # Construct a `ConfigRecord` out of a flattened `UserConfig`
         fed_config = flatten_dict(federation_config.get("options", {}))

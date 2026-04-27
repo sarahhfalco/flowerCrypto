@@ -6,7 +6,6 @@ script located in the MIRAGE toolkit.
 """
 
 import json
-
 import requests
 
 

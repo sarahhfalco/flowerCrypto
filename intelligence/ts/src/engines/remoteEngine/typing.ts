@@ -13,7 +13,7 @@
 // limitations under the License.
 // =============================================================================
 
-import { EmbeddingInput, Message, Tool, ToolCall, Usage } from '../../typing';
+import { EmbeddingInput, Message, Tool, ToolCall } from '../../typing';
 
 interface ChoiceMessage {
   role: string;
@@ -51,6 +51,15 @@ interface StreamChoice {
   };
 }
 
+interface Usage {
+  total_duration: number; // time spent generating the response
+  load_duration: number; // time spent in nanoseconds loading the model
+  prompt_eval_count: number; // number of tokens in the prompt
+  prompt_eval_duration: number; // time spent in nanoseconds evaluating the prompt
+  eval_count: number; // number of tokens in the response
+  eval_duration: number; // time in nanoseconds spent generating the response
+}
+
 export interface EmbedRequest {
   model: string;
   input: EmbeddingInput;
@@ -78,6 +87,10 @@ export interface ChatCompletionsResponse {
   model: string;
   choices: Choice[];
   usage: Usage;
+}
+
+interface ServerSentEvent {
+  data: string;
 }
 
 interface StreamChunk {
@@ -123,8 +136,10 @@ export function isPlatformHttpError(o: unknown): o is PlatformHttpError {
   );
 }
 
-export function getServerSentEventData(o: unknown): string {
-  return (o as string).slice(6).trim();
+export function isServerSentEvent(o: unknown): o is ServerSentEvent {
+  return (
+    typeof o === 'object' && o !== null && typeof (o as Record<string, unknown>).data === 'string'
+  );
 }
 
 export function isStreamChunk(o: unknown): o is StreamChunk {

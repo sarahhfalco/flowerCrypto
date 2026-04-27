@@ -22,7 +22,10 @@ from typing import Optional
 
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import load_ssh_private_key
+from cryptography.hazmat.primitives.serialization import (
+    load_ssh_private_key,
+    load_ssh_public_key,
+)
 
 from flwr.common import EventType, event
 from flwr.common.args import try_obtain_root_certificates
@@ -38,7 +41,6 @@ from flwr.common.constant import (
 )
 from flwr.common.exit import ExitCode, flwr_exit
 from flwr.common.logger import log
-from flwr.supercore.grpc_health import add_args_health
 from flwr.supernode.start_client_internal import start_client_internal
 
 
@@ -46,7 +48,7 @@ def flower_supernode() -> None:
     """Run Flower SuperNode."""
     args = _parse_args_run_supernode().parse_args()
 
-    log(INFO, "Starting Flower SuperNode")
+    #log(INFO, "Starting Flower SuperNode")
 
     event(EventType.RUN_SUPERNODE_ENTER)
 
@@ -60,13 +62,6 @@ def flower_supernode() -> None:
 
     root_certificates = try_obtain_root_certificates(args, args.superlink)
     authentication_keys = _try_setup_client_authentication(args)
-
-    # Warn if authentication keys are provided but transport is not grpc-rere
-    if authentication_keys is not None and args.transport != TRANSPORT_TYPE_GRPC_RERE:
-        log(
-            WARN,
-            "SuperNode Authentication is only supported with the grpc-rere transport.",
-        )
 
     log(DEBUG, "Isolation mode: %s", args.isolation)
 
@@ -84,7 +79,6 @@ def flower_supernode() -> None:
         flwr_path=args.flwr_dir,
         isolation=args.isolation,
         clientappio_api_address=args.clientappio_api_address,
-        health_server_address=args.health_server_address,
     )
 
 
@@ -124,7 +118,6 @@ def _parse_args_run_supernode() -> argparse.ArgumentParser:
         help="ClientAppIo API (gRPC) server address (IPv4, IPv6, or a domain name). "
         f"By default, it is set to {CLIENTAPPIO_API_DEFAULT_SERVER_ADDRESS}.",
     )
-    add_args_health(parser)
 
     return parser
 
@@ -192,12 +185,12 @@ def _parse_args_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--auth-supernode-private-key",
         type=str,
-        help="Path to the SuperNode's private key to enable authentication.",
+        help="The SuperNode's private key (as a path str) to enable authentication.",
     )
     parser.add_argument(
         "--auth-supernode-public-key",
         type=str,
-        help="This argument is deprecated and will be removed in a future release.",
+        help="The SuperNode's public key (as a path str) to enable authentication.",
     )
     parser.add_argument(
         "--node-config",
@@ -211,8 +204,11 @@ def _parse_args_common(parser: argparse.ArgumentParser) -> None:
 def _try_setup_client_authentication(
     args: argparse.Namespace,
 ) -> Optional[tuple[ec.EllipticCurvePrivateKey, ec.EllipticCurvePublicKey]]:
-    if not args.auth_supernode_private_key:
+    if not args.auth_supernode_private_key and not args.auth_supernode_public_key:
         return None
+
+    if not args.auth_supernode_private_key or not args.auth_supernode_public_key:
+        flwr_exit(ExitCode.SUPERNODE_NODE_AUTH_KEYS_REQUIRED)
 
     try:
         ssh_private_key = load_ssh_private_key(
@@ -223,15 +219,23 @@ def _try_setup_client_authentication(
             raise ValueError()
     except (ValueError, UnsupportedAlgorithm):
         flwr_exit(
-            ExitCode.SUPERNODE_NODE_AUTH_KEY_INVALID,
+            ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
             "Unable to parse the private key file.",
         )
 
-    if args.auth_supernode_public_key:
-        log(
-            WARN,
-            "The `--auth-supernode-public-key` flag is deprecated and will be "
-            "removed in a future release. The public key is now derived from the "
-            "private key provided by `--auth-supernode-private-key`.",
+    try:
+        ssh_public_key = load_ssh_public_key(
+            Path(args.auth_supernode_public_key).read_bytes()
         )
-    return ssh_private_key, ssh_private_key.public_key()
+        if not isinstance(ssh_public_key, ec.EllipticCurvePublicKey):
+            raise ValueError()
+    except (ValueError, UnsupportedAlgorithm):
+        flwr_exit(
+            ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
+            "Unable to parse the public key file.",
+        )
+
+    return (
+        ssh_private_key,
+        ssh_public_key,
+    )

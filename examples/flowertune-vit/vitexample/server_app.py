@@ -1,54 +1,18 @@
 """vitexample: A Flower / PyTorch app with Vision Transformers."""
 
+from logging import INFO
+
 import torch
 from datasets import Dataset, load_dataset
-from flwr.app import ArrayRecord, Context, MetricRecord
-from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
 from torch.utils.data import DataLoader
 
-from vitexample.task import apply_eval_transforms, get_model, test
+from vitexample.task import apply_eval_transforms
+from vitexample.task import get_model, set_params, test, get_params
 
-# Create ServerApp
-app = ServerApp()
-
-
-@app.main()
-def main(grid: Grid, context: Context) -> None:
-    """Main entry point for the ServerApp."""
-
-    # Define tested for central evaluation
-    dataset_name = context.run_config["dataset-name"]
-    dataset = load_dataset(dataset_name)
-    test_set = dataset["test"]
-    num_rounds = context.run_config["num-server-rounds"]
-
-    # Set initial global model
-    num_classes = context.run_config["num-classes"]
-    model = get_model(num_classes)
-    finetune_layers = model.heads
-    arrays = ArrayRecord(finetune_layers.state_dict())
-
-    # Configure the strategy
-    strategy = FedAvg(
-        fraction_train=0.5,  # Sample 50% of available clients
-        fraction_evaluate=0.0,  # No federated evaluation
-    )
-
-    # Start strategy, run FedAvg for `num_rounds`
-    result = strategy.start(
-        grid=grid,
-        initial_arrays=arrays,
-        num_rounds=num_rounds,
-        evaluate_fn=get_evaluate_fn(
-            test_set, num_classes
-        ),  # Global evaluation function
-    )
-
-    # Save final model to disk
-    print("\nSaving final model to disk...")
-    state_dict = result.arrays.to_torch_state_dict()
-    torch.save(state_dict, "final_model.pt")
+from flwr.common import Context, ndarrays_to_parameters
+from flwr.common.logger import log
+from flwr.server import ServerApp, ServerConfig, ServerAppComponents
+from flwr.server.strategy import FedAvg
 
 
 def get_evaluate_fn(
@@ -57,7 +21,7 @@ def get_evaluate_fn(
 ):
     """Return an evaluation function for centralized evaluation."""
 
-    def evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
+    def evaluate(server_round, parameters, config):
         """Use the entire Oxford Flowers-102 test set for evaluation."""
 
         # Determine device
@@ -65,8 +29,7 @@ def get_evaluate_fn(
 
         # Instantiate model and apply current global parameters
         model = get_model(num_classes)
-        finetune_layers = model.heads
-        finetune_layers.load_state_dict(arrays.to_torch_state_dict(), strict=True)
+        set_params(model, parameters)
         model.to(device)
 
         # Apply transform to dataset
@@ -75,8 +38,40 @@ def get_evaluate_fn(
         testloader = DataLoader(testset, batch_size=128)
         # Run evaluation
         loss, accuracy = test(model, testloader, device=device)
+        log(INFO, f"round: {server_round} -> acc: {accuracy:.4f}, loss: {loss: .4f}")
 
-        # Return the evaluation metrics
-        return MetricRecord({"accuracy": accuracy, "loss": loss})
+        return loss, {"accuracy": accuracy}
 
     return evaluate
+
+
+def server_fn(context: Context):
+
+    # Define tested for central evaluation
+    dataset_name = context.run_config["dataset-name"]
+    dataset = load_dataset(dataset_name)
+    test_set = dataset["test"]
+
+    # Set initial global model
+    num_classes = context.run_config["num-classes"]
+    ndarrays = get_params(get_model(num_classes))
+    init_parameters = ndarrays_to_parameters(ndarrays)
+
+    # Configure the strategy
+    strategy = FedAvg(
+        fraction_fit=0.5,  # Sample 50% of available clients
+        fraction_evaluate=0.0,  # No federated evaluation
+        evaluate_fn=get_evaluate_fn(
+            test_set, num_classes
+        ),  # Global evaluation function
+        initial_parameters=init_parameters,
+    )
+
+    # Construct ServerConfig
+    num_rounds = context.run_config["num-server-rounds"]
+    config = ServerConfig(num_rounds=num_rounds)
+
+    return ServerAppComponents(strategy=strategy, config=config)
+
+
+app = ServerApp(server_fn=server_fn)

@@ -11,8 +11,6 @@ the art in the field.
 🧑‍🏫 This tutorial starts from zero and expects no familiarity with federated learning.
 Only a basic understanding of data science and Python programming is assumed.
 
-.. tip::
-
     `Star Flower on GitHub <https://github.com/adap/flower>`__ ⭐️ and join the Flower
     community on Flower Discuss and the Flower Slack to connect, ask questions, and get
     help:

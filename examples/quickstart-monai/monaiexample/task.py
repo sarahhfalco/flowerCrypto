@@ -2,14 +2,11 @@
 
 import os
 import tarfile
-from collections import OrderedDict
 from urllib import request
+from collections import OrderedDict
 
-import monai
 import torch
-from datasets import Dataset
-from filelock import FileLock
-from flwr_datasets.partitioner import IidPartitioner
+import monai
 from monai.networks.nets import densenet
 from monai.transforms import (
     Compose,
@@ -21,6 +18,9 @@ from monai.transforms import (
     ScaleIntensity,
     ToTensor,
 )
+from filelock import FileLock
+from datasets import Dataset
+from flwr_datasets.partitioner import IidPartitioner
 
 
 def load_model():
@@ -40,26 +40,21 @@ def set_params(model, ndarrays):
     model.load_state_dict(state_dict, strict=True)
 
 
-def train_func(model, train_loader, epoch_num, device):
+def train(model, train_loader, epoch_num, device):
     """Train a model using the supplied dataloader."""
     model.to(device)
     loss_function = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), 1e-5)
-    running_loss = 0.0
     for _ in range(epoch_num):
         model.train()
         for batch in train_loader:
             images, labels = batch["img"], batch["label"]
             optimizer.zero_grad()
-            loss = loss_function(model(images.to(device)), labels.to(device))
-            loss.backward()
+            loss_function(model(images.to(device)), labels.to(device)).backward()
             optimizer.step()
-            running_loss += loss.item()
-    avg_trainloss = running_loss / len(train_loader)
-    return avg_trainloss
 
 
-def test_func(model, test_loader, device):
+def test(model, test_loader, device):
     """Evaluate a model on a held-out dataset."""
     model.to(device)
     model.eval()

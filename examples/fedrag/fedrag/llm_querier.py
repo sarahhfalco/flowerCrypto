@@ -1,10 +1,11 @@
 """fedrag: A Flower Federated RAG app."""
 
-import os
 import re
-
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+import os
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # to avoid deadlocks during tokenization
 

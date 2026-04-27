@@ -8,13 +8,13 @@ from itertools import cycle
 from time import sleep
 
 import numpy as np
-from flwr.app import ConfigRecord, Context, Message, MessageType, RecordDict
-from flwr.serverapp import Grid, ServerApp
-from sklearn.metrics import accuracy_score
-
 from fedrag.llm_querier import LLMQuerier
 from fedrag.mirage_qa import MirageQA
 from fedrag.task import index_exists
+from sklearn.metrics import accuracy_score
+
+from flwr.common import ConfigRecord, Context, Message, MessageType, RecordDict
+from flwr.server import Grid, ServerApp
 
 
 def node_online_loop(grid: Grid) -> list[int]:
@@ -101,7 +101,7 @@ def submit_question(
 
     # Send messages and wait for all results
     replies = grid.send_and_receive(messages)
-    print("Received {}/{} results".format(len(replies), len(messages)))
+    # print("Received {}/{} results".format(len(replies), len(messages)))
 
     documents, scores = [], []
     for reply in replies:

@@ -15,7 +15,6 @@
 """Tests for in-memory grid."""
 
 
-import secrets
 import time
 import unittest
 from collections.abc import Iterable
@@ -24,7 +23,7 @@ from uuid import uuid4
 
 from flwr.common import ConfigRecord, Message, RecordDict, now
 from flwr.common.constant import (
-    HEARTBEAT_INTERVAL_INF,
+    HEARTBEAT_MAX_INTERVAL,
     NODE_ID_NUM_BYTES,
     SUPERLINK_NODE_ID,
     Status,
@@ -38,7 +37,6 @@ from flwr.server.superlink.linkstate import (
 )
 from flwr.server.superlink.linkstate.linkstate_test import create_ins_message
 from flwr.server.superlink.linkstate.utils import generate_rand_int_from_bytes
-from flwr.supercore.constant import FLWR_IN_MEMORY_DB_NAME
 
 from .inmemory_grid import InMemoryGrid
 
@@ -46,12 +44,7 @@ from .inmemory_grid import InMemoryGrid
 def push_messages(grid: InMemoryGrid, num_nodes: int) -> tuple[Iterable[str], int]:
     """Help push messages to state."""
     for _ in range(num_nodes):
-        node_id = grid.state.create_node(
-            "mock_owner",
-            secrets.token_bytes(32),
-            heartbeat_interval=0,  # This field has no effect
-        )
-        grid.state.acknowledge_node_heartbeat(node_id, HEARTBEAT_INTERVAL_INF)
+        node_id = grid.state.create_node(heartbeat_interval=HEARTBEAT_MAX_INTERVAL)
     num_messages = 3
     msgs = [Message(RecordDict(), node_id, "query") for _ in range(num_messages)]
 
@@ -221,7 +214,7 @@ class TestInMemoryGrid(unittest.TestCase):
     def test_message_store_consistency_after_push_pull_inmemory_state(self) -> None:
         """Test messages are deleted in in-memory state once messages are pulled."""
         # Prepare
-        state_factory = LinkStateFactory(FLWR_IN_MEMORY_DB_NAME)
+        state_factory = LinkStateFactory(":flwr-in-memory-state:")
         state = state_factory.state()
         run_id = state.create_run("", "", "", {}, ConfigRecord(), "")
         self.grid = InMemoryGrid(state_factory)

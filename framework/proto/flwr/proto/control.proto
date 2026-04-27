@@ -21,7 +21,6 @@ import "flwr/proto/fab.proto";
 import "flwr/proto/transport.proto";
 import "flwr/proto/recorddict.proto";
 import "flwr/proto/run.proto";
-import "flwr/proto/node.proto";
 
 service Control {
   // Start run upon request
@@ -42,25 +41,12 @@ service Control {
 
   // Get auth tokens upon request
   rpc GetAuthTokens(GetAuthTokensRequest) returns (GetAuthTokensResponse) {}
-
-  // Pull artifacts generated during a run (flwr pull)
-  rpc PullArtifacts(PullArtifactsRequest) returns (PullArtifactsResponse) {}
-
-  // Register SuperNode
-  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse) {}
-
-  // Unregister SuperNode
-  rpc UnregisterNode(UnregisterNodeRequest) returns (UnregisterNodeResponse) {}
-
-  // List SuperNodes
-  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse) {}
 }
 
 message StartRunRequest {
   Fab fab = 1;
   map<string, Scalar> override_config = 2;
   ConfigRecord federation_options = 3;
-  string app_id = 4;
 }
 message StartRunResponse { optional uint64 run_id = 1; }
 message StreamLogsRequest {
@@ -79,7 +65,7 @@ message ListRunsResponse {
 
 message GetLoginDetailsRequest {}
 message GetLoginDetailsResponse {
-  string authn_type = 1;
+  string auth_type = 1;
   string device_code = 2;
   string verification_uri_complete = 3;
   int64 expires_in = 4;
@@ -94,18 +80,3 @@ message GetAuthTokensResponse {
 
 message StopRunRequest { uint64 run_id = 1; }
 message StopRunResponse { bool success = 1; }
-
-message PullArtifactsRequest { uint64 run_id = 1; }
-message PullArtifactsResponse { optional string url = 1; }
-
-message RegisterNodeRequest { bytes public_key = 1; }
-message RegisterNodeResponse { optional uint64 node_id = 1; }
-
-message UnregisterNodeRequest { uint64 node_id = 1; }
-message UnregisterNodeResponse {}
-
-message ListNodesRequest {}
-message ListNodesResponse {
-  repeated NodeInfo nodes_info = 1;
-  string now = 2;
-}

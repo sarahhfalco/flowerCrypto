@@ -2,8 +2,7 @@
 
 import warnings
 
-from flwr.client import NumPyClient
-from flwr.clientapp import ClientApp
+from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 from sklearn.metrics import log_loss
 

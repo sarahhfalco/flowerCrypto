@@ -18,11 +18,13 @@ You can then install the project dependencies with:
 npm i
 ```
 
-> [!NOTE]
-> The `watch` script relies on [entr](https://github.com/eradman/entr).
+```{note}
+The `watch` script relies on [entr](https://github.com/eradman/entr).
+```
 
-> [!WARNING]
-> In order to use remote handoff, copy `.env.example` into `.env` and update the API key inside it (if you don't have a valid API key, you can register [here](https://flower.ai/intelligence/)).
+```{warning}
+In order to use remote handoff, copy `.env.example` into `.env` and update the API key inside it (if you don't have a valid API key, you can register [here](https://flower.ai/intelligence/)).
+```
 
 ## Build
 

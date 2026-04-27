@@ -18,8 +18,6 @@
 from collections.abc import ItemsView, Iterator, KeysView, MutableMapping, ValuesView
 from typing import Callable, Generic, TypeVar, cast
 
-from typing_extensions import Self
-
 K = TypeVar("K")  # Key type
 V = TypeVar("V")  # Value type
 
@@ -88,13 +86,3 @@ class TypedDict(MutableMapping[K, V], Generic[K, V]):
     def items(self) -> ItemsView[K, V]:
         """D.items() -> a set-like object providing a view on D's items."""
         return cast(dict[K, V], self.__dict__["_data"]).items()
-
-    def copy(self) -> Self:
-        """Return a shallow copy of the dictionary."""
-        # Allocate instance without going through __init__
-        new = self.__class__.__new__(type(self))
-        # Copy internal state
-        new.__dict__["_check_key_fn"] = self.__dict__["_check_key_fn"]
-        new.__dict__["_check_value_fn"] = self.__dict__["_check_value_fn"]
-        new.__dict__["_data"] = cast(dict[K, V], self.__dict__["_data"]).copy()
-        return new

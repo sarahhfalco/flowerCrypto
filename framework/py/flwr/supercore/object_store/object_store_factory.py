@@ -19,27 +19,15 @@ from logging import DEBUG
 from typing import Optional
 
 from flwr.common.logger import log
-from flwr.supercore.constant import FLWR_IN_MEMORY_DB_NAME
 
 from .in_memory_object_store import InMemoryObjectStore
 from .object_store import ObjectStore
-from .sqlite_object_store import SqliteObjectStore
 
 
 class ObjectStoreFactory:
-    """Factory class that creates ObjectStore instances.
+    """Factory class that creates ObjectStore instances."""
 
-    Parameters
-    ----------
-    database : str (default: FLWR_IN_MEMORY_DB_NAME)
-        A string representing the path to the database file that will be opened.
-        Note that passing ":memory:" will open a connection to a database that is
-        in RAM, instead of on disk. And FLWR_IN_MEMORY_DB_NAME will create an
-        Python-based in-memory ObjectStore.
-    """
-
-    def __init__(self, database: str = FLWR_IN_MEMORY_DB_NAME) -> None:
-        self.database = database
+    def __init__(self) -> None:
         self.store_instance: Optional[ObjectStore] = None
 
     def store(self) -> ObjectStore:
@@ -50,15 +38,7 @@ class ObjectStoreFactory:
         ObjectStore
             An ObjectStore instance for storing objects by object_id.
         """
-        # InMemoryObjectStore
-        if self.database == FLWR_IN_MEMORY_DB_NAME:
-            if self.store_instance is None:
-                self.store_instance = InMemoryObjectStore()
-            log(DEBUG, "Using InMemoryObjectStore")
-            return self.store_instance
-
-        # SqliteObjectStore
-        store = SqliteObjectStore(self.database)
-        store.initialize()
-        log(DEBUG, "Using SqliteObjectStore")
-        return store
+        if self.store_instance is None:
+            self.store_instance = InMemoryObjectStore()
+        log(DEBUG, "Using InMemoryObjectStore")
+        return self.store_instance

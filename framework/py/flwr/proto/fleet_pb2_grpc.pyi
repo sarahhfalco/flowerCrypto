@@ -12,25 +12,13 @@ import grpc
 
 class FleetStub:
     def __init__(self, channel: grpc.Channel) -> None: ...
-    RegisterNode: grpc.UnaryUnaryMultiCallable[
-        flwr.proto.fleet_pb2.RegisterNodeFleetRequest,
-        flwr.proto.fleet_pb2.RegisterNodeFleetResponse]
-    """Register Node"""
+    CreateNode: grpc.UnaryUnaryMultiCallable[
+        flwr.proto.fleet_pb2.CreateNodeRequest,
+        flwr.proto.fleet_pb2.CreateNodeResponse]
 
-    ActivateNode: grpc.UnaryUnaryMultiCallable[
-        flwr.proto.fleet_pb2.ActivateNodeRequest,
-        flwr.proto.fleet_pb2.ActivateNodeResponse]
-    """Activate Node"""
-
-    DeactivateNode: grpc.UnaryUnaryMultiCallable[
-        flwr.proto.fleet_pb2.DeactivateNodeRequest,
-        flwr.proto.fleet_pb2.DeactivateNodeResponse]
-    """Deactivate Node"""
-
-    UnregisterNode: grpc.UnaryUnaryMultiCallable[
-        flwr.proto.fleet_pb2.UnregisterNodeFleetRequest,
-        flwr.proto.fleet_pb2.UnregisterNodeFleetResponse]
-    """Unregister Node"""
+    DeleteNode: grpc.UnaryUnaryMultiCallable[
+        flwr.proto.fleet_pb2.DeleteNodeRequest,
+        flwr.proto.fleet_pb2.DeleteNodeResponse]
 
     SendNodeHeartbeat: grpc.UnaryUnaryMultiCallable[
         flwr.proto.heartbeat_pb2.SendNodeHeartbeatRequest,
@@ -79,36 +67,16 @@ class FleetStub:
 
 class FleetServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def RegisterNode(self,
-        request: flwr.proto.fleet_pb2.RegisterNodeFleetRequest,
+    def CreateNode(self,
+        request: flwr.proto.fleet_pb2.CreateNodeRequest,
         context: grpc.ServicerContext,
-    ) -> flwr.proto.fleet_pb2.RegisterNodeFleetResponse:
-        """Register Node"""
-        pass
+    ) -> flwr.proto.fleet_pb2.CreateNodeResponse: ...
 
     @abc.abstractmethod
-    def ActivateNode(self,
-        request: flwr.proto.fleet_pb2.ActivateNodeRequest,
+    def DeleteNode(self,
+        request: flwr.proto.fleet_pb2.DeleteNodeRequest,
         context: grpc.ServicerContext,
-    ) -> flwr.proto.fleet_pb2.ActivateNodeResponse:
-        """Activate Node"""
-        pass
-
-    @abc.abstractmethod
-    def DeactivateNode(self,
-        request: flwr.proto.fleet_pb2.DeactivateNodeRequest,
-        context: grpc.ServicerContext,
-    ) -> flwr.proto.fleet_pb2.DeactivateNodeResponse:
-        """Deactivate Node"""
-        pass
-
-    @abc.abstractmethod
-    def UnregisterNode(self,
-        request: flwr.proto.fleet_pb2.UnregisterNodeFleetRequest,
-        context: grpc.ServicerContext,
-    ) -> flwr.proto.fleet_pb2.UnregisterNodeFleetResponse:
-        """Unregister Node"""
-        pass
+    ) -> flwr.proto.fleet_pb2.DeleteNodeResponse: ...
 
     @abc.abstractmethod
     def SendNodeHeartbeat(self,

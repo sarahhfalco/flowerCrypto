@@ -1,6 +1,7 @@
 """$project_name: A Flower / $framework_str app."""
 
 import warnings
+from collections import OrderedDict
 
 import torch
 import transformers
@@ -61,24 +62,17 @@ def load_data(partition_id: int, num_partitions: int, model_name: str):
     return trainloader, testloader
 
 
-def train(net, trainloader, num_steps, device):
+def train(net, trainloader, epochs, device):
     optimizer = AdamW(net.parameters(), lr=5e-5)
     net.train()
-    running_loss = 0.0
-    step_cnt = 0
-    for batch in trainloader:
-        batch = {k: v.to(device) for k, v in batch.items()}
-        outputs = net(**batch)
-        loss = outputs.loss
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        running_loss += loss.item()
-        step_cnt += 1
-        if step_cnt >= num_steps:
-            break
-    avg_trainloss = running_loss / step_cnt
-    return avg_trainloss
+    for _ in range(epochs):
+        for batch in trainloader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+            outputs = net(**batch)
+            loss = outputs.loss
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
 
 def test(net, testloader, device):
@@ -96,3 +90,13 @@ def test(net, testloader, device):
     loss /= len(testloader.dataset)
     accuracy = metric.compute()["accuracy"]
     return loss, accuracy
+
+
+def get_weights(net):
+    return [val.cpu().numpy() for _, val in net.state_dict().items()]
+
+
+def set_weights(net, parameters):
+    params_dict = zip(net.state_dict().keys(), parameters)
+    state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+    net.load_state_dict(state_dict, strict=True)

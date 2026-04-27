@@ -25,7 +25,6 @@ import {
   Result,
   StreamEvent,
   Tool,
-  ToolChoice,
 } from '../typing';
 import { BaseEngine } from './engine';
 import { ChatCompletionsResponse, EmbedResponse } from './remoteEngine/typing';
@@ -61,7 +60,6 @@ export class RemoteEngine extends BaseEngine {
     stream?: boolean,
     onStreamEvent?: (event: StreamEvent) => void,
     tools?: Tool[],
-    toolChoice?: ToolChoice,
     encrypt = false,
     signal?: AbortSignal
   ): Promise<ChatResponseResult> {
@@ -88,7 +86,6 @@ export class RemoteEngine extends BaseEngine {
         maxCompletionTokens,
         responseFormat,
         tools,
-        toolChoice,
         onStreamEvent,
         signal
       );
@@ -103,7 +100,6 @@ export class RemoteEngine extends BaseEngine {
         responseFormat,
         false,
         tools,
-        toolChoice,
         encrypt,
         this.cryptoHandler.encryptionId
       );

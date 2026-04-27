@@ -5,11 +5,10 @@ This file is a slightly modified version of the statpearls.py script provided by
 https://github.com/Teddy-XiongGZ/MedRAG/blob/main/src/data/statpearls.py
 """
 
-import json
 import os
-import xml.etree.ElementTree as ET
-
+import json
 import tqdm
+import xml.etree.ElementTree as ET
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 

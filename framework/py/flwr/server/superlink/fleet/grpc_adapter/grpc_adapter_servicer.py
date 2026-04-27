@@ -33,12 +33,10 @@ from flwr.common.version import package_name, package_version
 from flwr.proto import grpcadapter_pb2_grpc  # pylint: disable=E0611
 from flwr.proto.fab_pb2 import GetFabRequest  # pylint: disable=E0611
 from flwr.proto.fleet_pb2 import (  # pylint: disable=E0611
-    ActivateNodeRequest,
-    DeactivateNodeRequest,
+    CreateNodeRequest,
+    DeleteNodeRequest,
     PullMessagesRequest,
     PushMessagesRequest,
-    RegisterNodeFleetRequest,
-    UnregisterNodeFleetRequest,
 )
 from flwr.proto.grpcadapter_pb2 import MessageContainer  # pylint: disable=E0611
 from flwr.proto.heartbeat_pb2 import SendNodeHeartbeatRequest  # pylint: disable=E0611
@@ -79,23 +77,15 @@ def _handle(
 class GrpcAdapterServicer(grpcadapter_pb2_grpc.GrpcAdapterServicer, FleetServicer):
     """Fleet API via GrpcAdapter servicer."""
 
-    def SendReceive(  # pylint: disable=too-many-return-statements, too-many-branches
+    def SendReceive(  # pylint: disable=too-many-return-statements
         self, request: MessageContainer, context: grpc.ServicerContext
     ) -> MessageContainer:
         """."""
         log(DEBUG, "GrpcAdapterServicer.SendReceive")
-        if request.grpc_message_name == RegisterNodeFleetRequest.__qualname__:
-            return _handle(
-                request, context, RegisterNodeFleetRequest, self.RegisterNode
-            )
-        if request.grpc_message_name == ActivateNodeRequest.__qualname__:
-            return _handle(request, context, ActivateNodeRequest, self.ActivateNode)
-        if request.grpc_message_name == DeactivateNodeRequest.__qualname__:
-            return _handle(request, context, DeactivateNodeRequest, self.DeactivateNode)
-        if request.grpc_message_name == UnregisterNodeFleetRequest.__qualname__:
-            return _handle(
-                request, context, UnregisterNodeFleetRequest, self.UnregisterNode
-            )
+        if request.grpc_message_name == CreateNodeRequest.__qualname__:
+            return _handle(request, context, CreateNodeRequest, self.CreateNode)
+        if request.grpc_message_name == DeleteNodeRequest.__qualname__:
+            return _handle(request, context, DeleteNodeRequest, self.DeleteNode)
         if request.grpc_message_name == SendNodeHeartbeatRequest.__qualname__:
             return _handle(
                 request, context, SendNodeHeartbeatRequest, self.SendNodeHeartbeat

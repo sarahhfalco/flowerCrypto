@@ -47,15 +47,25 @@ Meet the Flower community on [flower.ai](https://flower.ai)!
 
 Flower's goal is to make federated learning accessible to everyone. This series of tutorials introduces the fundamentals of federated learning and how to implement them in Flower.
 
-0. **[What is Federated Learning?](https://flower.ai/docs/framework/main/en/tutorial-series-what-is-federated-learning.html)**
+0. **What is Federated Learning?**
 
-1. **[An Introduction to Federated Learning](https://flower.ai/docs/framework/main/en/tutorial-series-get-started-with-flower-pytorch.html)**
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-what-is-federated-learning.ipynb) (or open the [Jupyter Notebook](https://github.com/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-what-is-federated-learning.ipynb))
 
-2. **[Using Strategies in Federated Learning](https://flower.ai/docs/framework/main/en/tutorial-series-use-a-federated-learning-strategy-pytorch.html)**
+1. **An Introduction to Federated Learning**
 
-3. **[Customize a Flower Strategy](https://flower.ai/docs/framework/main/en/tutorial-series-build-a-strategy-from-scratch-pytorch.html)**
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-get-started-with-flower-pytorch.ipynb) (or open the [Jupyter Notebook](https://github.com/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-get-started-with-flower-pytorch.ipynb))
 
-4. **[Communicate Custom Messages](https://flower.ai/docs/framework/main/en/tutorial-series-customize-the-client-pytorch.html)**
+2. **Using Strategies in Federated Learning**
+
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-use-a-federated-learning-strategy-pytorch.ipynb) (or open the [Jupyter Notebook](https://github.com/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-use-a-federated-learning-strategy-pytorch.ipynb))
+
+3. **Building Strategies for Federated Learning**
+
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-build-a-strategy-from-scratch-pytorch.ipynb) (or open the [Jupyter Notebook](https://github.com/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-build-a-strategy-from-scratch-pytorch.ipynb))
+
+4. **Custom Clients for Federated Learning**
+
+   [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-customize-the-client-pytorch.ipynb) (or open the [Jupyter Notebook](https://github.com/adap/flower/blob/v1.20.0/framework/docs/source/tutorial-series-customize-the-client-pytorch.ipynb))
 
 Stay tuned, more tutorials are coming soon. Topics include **Privacy and Security in Federated Learning**, and **Scaling Federated Learning**.
 

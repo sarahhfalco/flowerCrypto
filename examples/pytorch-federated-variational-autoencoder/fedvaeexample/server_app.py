@@ -1,38 +1,28 @@
 """fedvaeexample: A Flower / PyTorch app for Federated Variational Autoencoder."""
 
-import torch
-from flwr.app import ArrayRecord, Context
-from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
+from fedvaeexample.task import Net, get_weights
 
-from fedvaeexample.task import Net
-
-# Create ServerApp
-app = ServerApp()
+from flwr.common import Context, ndarrays_to_parameters
+from flwr.server import ServerApp, ServerAppComponents, ServerConfig
+from flwr.server.strategy import FedAvg
 
 
-@app.main()
-def main(grid: Grid, context: Context) -> None:
-    """Main entry point for the ServerApp."""
+def server_fn(context: Context) -> ServerAppComponents:
+    """Construct components for ServerApp."""
 
     # Read from config
     num_rounds = context.run_config["num-server-rounds"]
 
     # Initialize model parameters
-    global_model = Net()
-    arrays = ArrayRecord(global_model.state_dict())
+    ndarrays = get_weights(Net())
+    parameters = ndarrays_to_parameters(ndarrays)
 
     # Define the strategy
-    strategy = FedAvg()
+    strategy = FedAvg(initial_parameters=parameters)
+    config = ServerConfig(num_rounds=num_rounds)
 
-    # Start strategy, run FedAvg for `num_rounds`
-    result = strategy.start(
-        grid=grid,
-        initial_arrays=arrays,
-        num_rounds=num_rounds,
-    )
+    return ServerAppComponents(strategy=strategy, config=config)
 
-    # Save final model to disk
-    print("\nSaving final model to disk...")
-    state_dict = result.arrays.to_torch_state_dict()
-    torch.save(state_dict, "final_model.pt")
+
+# Create ServerApp
+app = ServerApp(server_fn=server_fn)

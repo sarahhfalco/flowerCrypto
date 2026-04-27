@@ -13,13 +13,34 @@
 # limitations under the License.
 # ==============================================================================
 """RecordDict utilities."""
-
+import os
+import sys
 
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Union, cast, get_args
 
+import psutil
+
 from . import Array, ArrayRecord, ConfigRecord, MetricRecord, RecordDict
+from .crypto.crypto_selector import (
+    add_integrity,
+    authenticate,
+    check_integrity,
+    decrypt,
+    encrypt,
+    verify_authentication,
+)
+from .crypto.config_cripto import (
+    AUTH_ENABLED,
+    AUTH_METHOD,
+    ENCRYPTION_METHOD,
+    ENCRYPTION_ENABLED,
+    INTEGRITY_ENABLED,
+    INTEGRITY_METHOD,
+)
+from .crypto import log_file
+from .crypto.log_file import log_time
 from .typing import (
     Code,
     ConfigRecordValues,
@@ -38,86 +59,210 @@ from .typing import (
 )
 
 EMPTY_TENSOR_KEY = "_empty"
+import time
 
 
 def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Parameters:
-    """Convert ParameterRecord to legacy Parameters.
-
-    Warnings
-    --------
-    Because `Array`s in `ArrayRecord` encode more information of the
-    array-like or tensor-like data (e.g their datatype, shape) than `Parameters` it
-    might not be possible to reconstruct such data structures from `Parameters` objects
-    alone. Additional information or metadata must be provided from elsewhere.
-
-    Parameters
-    ----------
-    record : ArrayRecord
-        The record to be conveted into Parameters.
-    keep_input : bool
-        A boolean indicating whether entries in the record should be deleted from the
-        input dictionary immediately after adding them to the record.
-
-    Returns
-    -------
-    parameters : Parameters
-        The parameters in the legacy format Parameters.
     """
+    Convert ArrayRecord back into Parameters.
+    """
+
     parameters = Parameters(tensors=[], tensor_type="")
 
+    total_deser_time = 0.0   # tempo per costruire gli oggetti Parameters (no decrypt)
+    total_crypto_time = 0.0  # tempo crypto (cifratura/integrità)
+    total_decrypt_time = 0.0
+    total_integrity_time = 0.0
+    total_auth_time = 0.0
+    total_auth_verify_time = 0.0
+
+    # Iteriamo direttamente sulle chiavi senza creare copie costose
     for key in list(record.keys()):
-        if key != EMPTY_TENSOR_KEY:
-            parameters.tensors.append(record[key].data)
 
+        start_deser = time.perf_counter()
+
+        array_obj = record[key]
+
+        # tipo tensor
         if not parameters.tensor_type:
-            # Setting from first array in record. Recall the warning in the docstrings
-            # of this function.
-            parameters.tensor_type = record[key].stype
+            parameters.tensor_type = array_obj.stype
 
+        # estrai i dati RAW
+        data = array_obj.data
+        log_file.add_transport_message(len(data))
+
+        end_deser = time.perf_counter()
+        total_deser_time += (end_deser - start_deser)
+
+        # --- DECRYPT + INTEGRITY ---
+        if AUTH_ENABLED:
+            start_auth = time.perf_counter()
+            data = verify_authentication(data, AUTH_METHOD)
+            end_auth = time.perf_counter()
+            auth_verify_elapsed = end_auth - start_auth
+            total_auth_time += auth_verify_elapsed
+            total_auth_verify_time += auth_verify_elapsed
+
+        if INTEGRITY_ENABLED:
+            start_integrity = time.perf_counter()
+            data = check_integrity(data, INTEGRITY_METHOD)
+            end_integrity = time.perf_counter()
+            integrity_elapsed = end_integrity - start_integrity
+            total_crypto_time += integrity_elapsed
+            total_integrity_time += integrity_elapsed
+
+        if ENCRYPTION_ENABLED:
+            start_decrypt = time.perf_counter()
+            data = decrypt(data, ENCRYPTION_METHOD)
+            end_decrypt = time.perf_counter()
+            decrypt_elapsed = end_decrypt - start_decrypt
+            total_crypto_time += decrypt_elapsed
+            total_decrypt_time += decrypt_elapsed
+
+        # aggiungi il tensor
+        parameters.tensors.append(data)
+
+        # rimuovi se keep_input = False
         if not keep_input:
             del record[key]
 
+    # LOG TEMPI REALI
+    total_time = total_deser_time + total_crypto_time + total_auth_time
+    crypto_impact = (total_crypto_time / total_time * 100.0) if total_time > 0 else 0.0
+    auth_impact = (total_auth_time / total_time * 100.0) if total_time > 0 else 0.0
+    log_file.add_crypto_time(total_crypto_time, total_deser_time)
+    log_file.add_encrypt_decrypt_time(0.0, total_decrypt_time)
+    log_file.add_integrity_time(total_integrity_time)
+    log_file.add_auth_time(total_auth_time)
+    log_file.add_auth_sign_verify_time(0.0, total_auth_verify_time)
+    log_time(
+        "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
+        "DESERIALIZE: %.5f s | CRYPTO: %.5f s | AUTH: %.5f s | TOTAL: %.5f s | "
+        "IMPACT: %.2f%% | AUTH_IMPACT: %.2f%%",
+        ENCRYPTION_ENABLED,
+        ENCRYPTION_METHOD,
+        AUTH_ENABLED,
+        AUTH_METHOD,
+        total_deser_time,
+        total_crypto_time,
+        total_auth_time,
+        total_time,
+        crypto_impact,
+        auth_impact,
+    )
+
     return parameters
 
-
 def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> ArrayRecord:
-    """Convert legacy Parameters into a single ArrayRecord.
 
-    Because there is no concept of names in the legacy Parameters, arbitrary keys will
-    be used when constructing the ArrayRecord. Similarly, the shape and data type
-    won't be recorded in the Array objects.
-
-    Parameters
-    ----------
-    parameters : Parameters
-        Parameters object to be represented as a ArrayRecord.
-    keep_input : bool
-        A boolean indicating whether parameters should be deleted from the input
-        Parameters object (i.e. a list of serialized NumPy arrays) immediately after
-        adding them to the record.
-
-    Returns
-    -------
-    ArrayRecord
-        The ArrayRecord containing the provided parameters.
-    """
     tensor_type = parameters.tensor_type
-
     num_arrays = len(parameters.tensors)
     ordered_dict = OrderedDict()
+
+    # Tempi separati
+    tot_serial_time = 0.0
+    tot_crypto_time = 0.0
+    tot_encrypt_time = 0.0
+    tot_integrity_time = 0.0
+    tot_auth_time = 0.0
+    tot_auth_sign_time = 0.0
+
     for idx in range(num_arrays):
-        if keep_input:
-            tensor = parameters.tensors[idx]
-        else:
-            tensor = parameters.tensors.pop(0)
+
+        # --- SERIALIZZAZIONE PURA ---
+        start_serial = time.perf_counter()
+
+        # Prendi il tensor SENZA usare pop(0), che è O(n)!
+        tensor = parameters.tensors[idx] if keep_input else parameters.tensors[idx]
+        dataR = tensor
+
+        end_serial = time.perf_counter()
+        tot_serial_time += (end_serial - start_serial)
+
+        base_bytes = len(dataR)
+        log_file.add_transport_message(base_bytes)
+
+        # --- CRITTOGRAFIA ---
+        if ENCRYPTION_ENABLED:
+            start_encrypt = time.perf_counter()
+            dataR = encrypt(dataR, ENCRYPTION_METHOD)
+            end_encrypt = time.perf_counter()
+            encrypt_elapsed = end_encrypt - start_encrypt
+            tot_crypto_time += encrypt_elapsed
+            tot_encrypt_time += encrypt_elapsed
+            log_file.add_overhead(
+                ENCRYPTION_METHOD,
+                "crypto",
+                len(dataR) - base_bytes,
+                base_bytes,
+            )
+            base_bytes = len(dataR)
+
+        if INTEGRITY_ENABLED:
+            start_integrity = time.perf_counter()
+            dataR = add_integrity(dataR, INTEGRITY_METHOD)
+            end_integrity = time.perf_counter()
+            integrity_elapsed = end_integrity - start_integrity
+            tot_crypto_time += integrity_elapsed
+            tot_integrity_time += integrity_elapsed
+            log_file.add_overhead(
+                INTEGRITY_METHOD,
+                "integrity",
+                len(dataR) - base_bytes,
+                base_bytes,
+            )
+            base_bytes = len(dataR)
+
+        if AUTH_ENABLED:
+            start_auth = time.perf_counter()
+            dataR = authenticate(dataR, AUTH_METHOD)
+            end_auth = time.perf_counter()
+            auth_elapsed = end_auth - start_auth
+            tot_auth_time += auth_elapsed
+            tot_auth_sign_time += auth_elapsed
+            log_file.add_overhead(
+                AUTH_METHOD,
+                "auth",
+                len(dataR) - base_bytes,
+                base_bytes,
+            )
+
+        # --- COSTRUZIONE ARRAY ---
         ordered_dict[str(idx)] = Array(
-            data=tensor, dtype="", stype=tensor_type, shape=()
+            data=dataR, dtype="", stype=tensor_type, shape=()
         )
 
+    # Caso senza tensori
     if num_arrays == 0:
         ordered_dict[EMPTY_TENSOR_KEY] = Array(
             data=b"", dtype="", stype=tensor_type, shape=()
         )
+
+    # LOG
+    total_time = tot_serial_time + tot_crypto_time + tot_auth_time
+    crypto_impact = (tot_crypto_time / total_time * 100.0) if total_time > 0 else 0.0
+    auth_impact = (tot_auth_time / total_time * 100.0) if total_time > 0 else 0.0
+    log_file.add_crypto_time(tot_crypto_time, tot_serial_time)
+    log_file.add_encrypt_decrypt_time(tot_encrypt_time, 0.0)
+    log_file.add_integrity_time(tot_integrity_time)
+    log_file.add_auth_time(tot_auth_time)
+    log_file.add_auth_sign_verify_time(tot_auth_sign_time, 0.0)
+    log_time(
+        "CRYPTO STATUS: enabled=%s method=%s | auth_enabled=%s auth_method=%s | "
+        "SERIALIZE: %.5f s | CRYPTO: %.5f s | AUTH: %.5f s | TOTAL: %.5f s | "
+        "IMPACT: %.2f%% | AUTH_IMPACT: %.2f%%",
+        ENCRYPTION_ENABLED,
+        ENCRYPTION_METHOD,
+        AUTH_ENABLED,
+        AUTH_METHOD,
+        tot_serial_time,
+        tot_crypto_time,
+        tot_auth_time,
+        total_time,
+        crypto_impact,
+        auth_impact,
+    )
+
     return ArrayRecord(ordered_dict, keep_input=keep_input)
 
 
@@ -189,10 +334,11 @@ def _extract_status_from_recorddict(res_str: str, recorddict: RecordDict) -> Sta
     status = recorddict.config_records[f"{res_str}.status"]
     code = cast(int, status["code"])
     return Status(code=Code(code), message=str(status["message"]))
-
-
+import inspect
+import traceback
 def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
     """Derive FitIns from a RecordDict object."""
+    # log_time("Client deserializza")
     parameters, config = _recorddict_to_fit_or_evaluate_ins_components(
         recorddict,
         ins_str="fitins",
@@ -201,15 +347,24 @@ def recorddict_to_fitins(recorddict: RecordDict, keep_input: bool) -> FitIns:
 
     return FitIns(parameters=parameters, config=config)
 
-
 def fitins_to_recorddict(fitins: FitIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitIns object."""
-    return _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
+    recorddict = _fit_or_evaluate_ins_to_recorddict(fitins, keep_input)
+    from .crypto.utils import log_serialization_size
+    log_serialization_size(recorddict, tag="fitins", mtu=1500)
+    # print("=== STACK COMPLETO DELLE CHIAMATE ===")
+    # traceback.print_stack()
+    # print("======================================")
+    #("Server serializza")
+    # log_time("SERVER SERIALIZZA ")
+    return recorddict
 
 
 def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
     """Derive FitRes from a RecordDict object."""
+    # log_time("Server deserializza")
     ins_str = "fitres"
+
     parameters = arrayrecord_to_parameters(
         recorddict.array_records[f"{ins_str}.parameters"], keep_input=keep_input
     )
@@ -229,6 +384,7 @@ def recorddict_to_fitres(recorddict: RecordDict, keep_input: bool) -> FitRes:
 
 def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a FitRes object."""
+    # log_time("Client serializza")
     recorddict = RecordDict()
 
     res_str = "fitres"
@@ -243,7 +399,8 @@ def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
         fitres.parameters,
         keep_input,
     )
-
+    from .crypto.utils import log_serialization_size
+    log_serialization_size(recorddict, tag="fitres", mtu=1500)
     # status
     recorddict = _embed_status_into_recorddict(res_str, fitres.status, recorddict)
 
@@ -252,6 +409,7 @@ def fitres_to_recorddict(fitres: FitRes, keep_input: bool) -> RecordDict:
 
 def recorddict_to_evaluateins(recorddict: RecordDict, keep_input: bool) -> EvaluateIns:
     """Derive EvaluateIns from a RecordDict object."""
+    #("client deserializza modello valutato")
     parameters, config = _recorddict_to_fit_or_evaluate_ins_components(
         recorddict,
         ins_str="evaluateins",
@@ -263,6 +421,7 @@ def recorddict_to_evaluateins(recorddict: RecordDict, keep_input: bool) -> Evalu
 
 def evaluateins_to_recorddict(evaluateins: EvaluateIns, keep_input: bool) -> RecordDict:
     """Construct a RecordDict from a EvaluateIns object."""
+    #log_time("Server serializza modello valutato")
     return _fit_or_evaluate_ins_to_recorddict(evaluateins, keep_input)
 
 

@@ -1,7 +1,8 @@
-from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
 from transformers import AutoTokenizer
 from trl import DataCollatorForCompletionOnlyLM
+
+from flwr_datasets.partitioner import IidPartitioner
+from flwr_datasets import FederatedDataset
 
 FDS = None  # Cache FederatedDataset
 

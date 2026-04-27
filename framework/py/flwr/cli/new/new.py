@@ -15,19 +15,13 @@
 """Flower command line interface `new` command."""
 
 
-import io
-import json
 import re
-import zipfile
 from enum import Enum
 from pathlib import Path
 from string import Template
 from typing import Annotated, Optional
 
-import requests
 import typer
-
-from flwr.supercore.constant import APP_ID_PATTERN, PLATFORM_API_URL
 
 from ..utils import (
     is_valid_project_name,
@@ -47,10 +41,8 @@ class MlFramework(str, Enum):
     JAX = "JAX"
     MLX = "MLX"
     NUMPY = "NumPy"
-    XGBOOST = "XGBoost"
     FLOWERTUNE = "FlowerTune"
     BASELINE = "Flower Baseline"
-    PYTORCH_LEGACY_API = "PyTorch (Legacy API, deprecated)"
 
 
 class LlmChallengeName(str, Enum):
@@ -99,180 +91,6 @@ def render_and_create(file_path: Path, template: str, context: dict[str, str]) -
     create_file(file_path, content)
 
 
-def print_success_prompt(
-    package_name: str, llm_challenge_str: Optional[str] = None
-) -> None:
-    """Print styled setup instructions for running a new Flower App after creation."""
-    prompt = typer.style(
-        "🎊 Flower App creation successful.\n\n"
-        "To run your Flower App, first install its dependencies:\n\n",
-        fg=typer.colors.GREEN,
-        bold=True,
-    )
-
-    _add = "	huggingface-cli login\n" if llm_challenge_str else ""
-
-    prompt += typer.style(
-        f"	cd {package_name} && pip install -e .\n" + _add + "\n",
-        fg=typer.colors.BRIGHT_CYAN,
-        bold=True,
-    )
-
-    prompt += typer.style(
-        "then, run the app:\n\n ",
-        fg=typer.colors.GREEN,
-        bold=True,
-    )
-
-    prompt += typer.style(
-        "\tflwr run .\n\n",
-        fg=typer.colors.BRIGHT_CYAN,
-        bold=True,
-    )
-
-    prompt += typer.style(
-        "💡 Check the README in your app directory to learn how to\n"
-        "customize it and how to run it using the Deployment Runtime.\n",
-        fg=typer.colors.GREEN,
-        bold=True,
-    )
-
-    print(prompt)
-
-
-# Security: prevent zip-slip
-def _safe_extract_zip(zf: zipfile.ZipFile, dest_dir: Path) -> None:
-    """Extract ZIP file into destination directory."""
-    dest_dir = dest_dir.resolve()
-
-    def _is_within_directory(base: Path, target: Path) -> bool:
-        try:
-            target.relative_to(base)
-            return True
-        except ValueError:
-            return False
-
-    for member in zf.infolist():
-        # Skip directory placeholders;
-        # ZipInfo can represent them as names ending with '/'.
-        if member.is_dir():
-            target_path = (dest_dir / member.filename).resolve()
-            if not _is_within_directory(dest_dir, target_path):
-                raise ValueError(f"Unsafe path in zip: {member.filename}")
-            target_path.mkdir(parents=True, exist_ok=True)
-            continue
-
-        # Files
-        target_path = (dest_dir / member.filename).resolve()
-        if not _is_within_directory(dest_dir, target_path):
-            raise ValueError(f"Unsafe path in zip: {member.filename}")
-
-        # Ensure parent exists
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Extract
-        with zf.open(member, "r") as src, open(target_path, "wb") as dst:
-            dst.write(src.read())
-
-
-def _download_zip_to_memory(presigned_url: str) -> io.BytesIO:
-    """Download ZIP file from Platform API to memory."""
-    try:
-        r = requests.get(presigned_url, timeout=60)
-        r.raise_for_status()
-    except requests.RequestException as e:
-        raise typer.BadParameter(f"ZIP download failed: {e}") from e
-
-    buf = io.BytesIO(r.content)
-    # Validate it's a zip
-    if not zipfile.is_zipfile(buf):
-        raise typer.BadParameter("Downloaded file is not a valid ZIP")
-    buf.seek(0)
-    return buf
-
-
-def _request_download_link(identifier: str) -> str:
-    """Request download link from Flower platform API."""
-    url = f"{PLATFORM_API_URL}/hub/fetch-zip"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    body = {
-        "identifier": identifier,  # send raw string of identifier
-    }
-
-    try:
-        resp = requests.post(url, headers=headers, data=json.dumps(body), timeout=20)
-    except requests.RequestException as e:
-        raise typer.BadParameter(f"Unable to connect to Platform API: {e}") from e
-
-    if resp.status_code == 404:
-        raise typer.BadParameter(f"'{identifier}' not found in Platform API")
-    if not resp.ok:
-        raise typer.BadParameter(
-            f"Platform API request failed with "
-            f"status {resp.status_code}. Details: {resp.text}"
-        )
-
-    data = resp.json()
-    if "zip_url" not in data:
-        raise typer.BadParameter("Invalid response from Platform API")
-    return str(data["zip_url"])
-
-
-def download_remote_app_via_api(identifier: str) -> None:
-    """Download App from Platform API."""
-    # Parse @user/app just to derive local dir name
-    m = re.match(APP_ID_PATTERN, identifier)
-    if not m:
-        raise typer.BadParameter(
-            "Invalid remote app ID. Expected format: '@user_name/app_name'."
-        )
-    app_name = m.group("app")
-
-    project_dir = Path.cwd() / app_name
-    if project_dir.exists():
-        if not typer.confirm(
-            typer.style(
-                f"\n💬 {app_name} already exists, do you want to override it?",
-                fg=typer.colors.MAGENTA,
-                bold=True,
-            )
-        ):
-            return
-
-    print(
-        typer.style(
-            f"\n🔗 Requesting download link for {identifier}...",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
-    )
-    presigned_url = _request_download_link(identifier)
-
-    print(
-        typer.style(
-            "⬇️  Downloading ZIP into memory...",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
-    )
-    zip_buf = _download_zip_to_memory(presigned_url)
-
-    print(
-        typer.style(
-            f"📦 Unpacking into {project_dir}...",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
-    )
-    with zipfile.ZipFile(zip_buf) as zf:
-        _safe_extract_zip(zf, Path.cwd())
-
-    print_success_prompt(app_name)
-
-
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 def new(
     app_name: Annotated[
@@ -291,12 +109,6 @@ def new(
     """Create new Flower App."""
     if app_name is None:
         app_name = prompt_text("Please provide the app name")
-
-    # Download remote app
-    if app_name and app_name.startswith("@"):
-        download_remote_app_via_api(app_name)
-        return
-
     if not is_valid_project_name(app_name):
         app_name = prompt_text(
             "Please provide a name that only contains "
@@ -342,9 +154,6 @@ def new(
     if framework_str == MlFramework.BASELINE:
         framework_str = "baseline"
 
-    if framework_str == MlFramework.PYTORCH_LEGACY_API:
-        framework_str = "pytorch_legacy_api"
-
     print(
         typer.style(
             f"\n🔨 Creating Flower App {app_name}...",
@@ -388,7 +197,7 @@ def new(
         }
 
         # Challenge specific context
-        fraction_train = "0.2" if llm_challenge_str == "code" else "0.1"
+        fraction_fit = "0.2" if llm_challenge_str == "code" else "0.1"
         if llm_challenge_str == "generalnlp":
             challenge_name = "General NLP"
             num_clients = "20"
@@ -407,7 +216,7 @@ def new(
             dataset_name = "flwrlabs/code-alpaca-20k"
 
         context["llm_challenge_str"] = llm_challenge_str
-        context["fraction_train"] = fraction_train
+        context["fraction_fit"] = fraction_fit
         context["challenge_name"] = challenge_name
         context["num_clients"] = num_clients
         context["dataset_name"] = dataset_name
@@ -434,18 +243,10 @@ def new(
             MlFramework.TENSORFLOW.value,
             MlFramework.SKLEARN.value,
             MlFramework.NUMPY.value,
-            MlFramework.XGBOOST.value,
-            "pytorch_legacy_api",
         ]
         if framework_str in frameworks_with_tasks:
             files[f"{import_name}/task.py"] = {
                 "template": f"app/code/task.{template_name}.py.tpl"
-            }
-
-        if framework_str == "pytorch_legacy_api":
-            # Use custom __init__ that better captures name of framework
-            files[f"{import_name}/__init__.py"] = {
-                "template": f"app/code/__init__.{framework_str}.py.tpl"
             }
 
         if framework_str == "baseline":
@@ -468,4 +269,38 @@ def new(
             context=context,
         )
 
-    print_success_prompt(package_name, llm_challenge_str)
+    prompt = typer.style(
+        "🎊 Flower App creation successful.\n\n"
+        "To run your Flower App, first install its dependencies:\n\n",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+    _add = "	huggingface-cli login\n" if llm_challenge_str else ""
+
+    prompt += typer.style(
+        f"	cd {package_name} && pip install -e .\n" + _add + "\n",
+        fg=typer.colors.BRIGHT_CYAN,
+        bold=True,
+    )
+
+    prompt += typer.style(
+        "then, run the app:\n\n ",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+    prompt += typer.style(
+        "\tflwr run .\n\n",
+        fg=typer.colors.BRIGHT_CYAN,
+        bold=True,
+    )
+
+    prompt += typer.style(
+        "💡 Check the README in your app directory to learn how to\n"
+        "customize it and how to run it using the Deployment Runtime.\n",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+    print(prompt)

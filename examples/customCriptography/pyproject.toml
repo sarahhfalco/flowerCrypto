@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "customCryptography"
+version = "1.0.0"
+description = "Federated Learning with PyTorch and authenticated Flower "
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.20.0",
+    "flwr-datasets[vision]>=0.5.0",
+    "torch>=2.5.0,<3.0.0",
+    "torchvision>=0.20.1,<0.21.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "flwrlabs"
+
+[tool.flwr.app.components]
+serverapp = "customCryptographyExample.server_app:app"
+clientapp = "customCryptographyExample.client_app:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 1000
+fraction-evaluate = 1.0
+local-epochs = 1
+learning-rate = 0.01
+batch-size = 32
+fraction-fit = 1.0
+[tool.flwr.federations]
+default = "my-federation"
+
+[tool.flwr.federations.my-federation]
+address = "127.0.0.1:9093" # Address of the Control API
+#root-certificates = "certificates/ca.crt"
+insecure = true
+#options.backend.client-resources.num-cpus = 3

@@ -9,7 +9,7 @@ tsc
 vite build
 
 vite build --config vite.config.bundled.ts
-cp -a dist/bundled/. dist/
+cp dist/bundled/flowerintelligence.bundled.es.js dist/
 rm -rf dist/bundled
 
 pnpm build:types

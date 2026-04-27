@@ -1,37 +1,47 @@
 """fastai_example: A Flower / Fastai app."""
 
-import torch
+from typing import List, Tuple
+
 from fastai.vision.all import squeezenet1_1
-from flwr.app import ArrayRecord, Context
-from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
+from flwr.common import Context, Metrics, ndarrays_to_parameters
+from flwr.server import ServerApp, ServerAppComponents, ServerConfig
+from flwr.server.strategy import FedAvg
 
-app = ServerApp()
+from fastai_example.task import get_params
 
 
-@app.main()
-def main(grid: Grid, context: Context) -> None:
-    """Main entry point for the ServerApp."""
+# Define metric aggregation function
+def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
+    """Compute weighted average metric values."""
+    # Multiply accuracy of each client by number of examples used
+    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
+    examples = [num_examples for num_examples, _ in metrics]
 
-    # Read run config
-    fraction_train: float = context.run_config["fraction-train"]
-    num_rounds: int = context.run_config["num-server-rounds"]
+    # Aggregate and return custom metric (weighted average)
+    return {"accuracy": sum(accuracies) / sum(examples)}
 
-    # Load global model
-    global_model = squeezenet1_1()
-    arrays = ArrayRecord(global_model.state_dict())
 
-    # Initialize FedAvg strategy
-    strategy = FedAvg(fraction_train=fraction_train)
+def server_fn(context: Context) -> ServerAppComponents:
+    """Construct components for ServerApp."""
 
-    # Start strategy, run FedAvg for `num_rounds`
-    result = strategy.start(
-        grid=grid,
-        initial_arrays=arrays,
-        num_rounds=num_rounds,
+    # Let's define the global model and pass it to the strategy
+    # Note this is optional.
+    parameters = ndarrays_to_parameters(get_params(squeezenet1_1()))
+
+    # Define strategy
+    fraction_fit = context.run_config["fraction-fit"]
+    strategy = FedAvg(
+        fraction_fit=fraction_fit,
+        fraction_evaluate=0.5,
+        evaluate_metrics_aggregation_fn=weighted_average,
+        initial_parameters=parameters,
     )
 
-    # Save final model to disk
-    print("\nSaving final model to disk...")
-    state_dict = result.arrays.to_torch_state_dict()
-    torch.save(state_dict, "final_model.pt")
+    # Construct ServerConfig
+    num_rounds = context.run_config["num-server-rounds"]
+    config = ServerConfig(num_rounds=num_rounds)
+
+    return ServerAppComponents(config=config, strategy=strategy)
+
+
+app = ServerApp(server_fn=server_fn)

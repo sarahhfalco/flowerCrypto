@@ -256,7 +256,6 @@ class Fab:
 
     hash_str: str
     content: bytes
-    verifications: dict[str, str]
 
 
 class RunNotRunningException(BaseException):
@@ -271,12 +270,12 @@ class InvalidRunStatusException(BaseException):
         self.message = message
 
 
-# OIDC account authentication types
+# OIDC user authentication types
 @dataclass
-class AccountAuthLoginDetails:
-    """Account authentication login details."""
+class UserAuthLoginDetails:
+    """User authentication login details."""
 
-    authn_type: str
+    auth_type: str
     device_code: str
     verification_uri_complete: str
     expires_in: int
@@ -284,8 +283,8 @@ class AccountAuthLoginDetails:
 
 
 @dataclass
-class AccountAuthCredentials:
-    """Account authentication tokens."""
+class UserAuthCredentials:
+    """User authentication tokens."""
 
     access_token: str
     refresh_token: str
