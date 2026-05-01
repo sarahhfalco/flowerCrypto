@@ -267,6 +267,7 @@ def server_evaluate(server_round: int, parameters: NDArrays):
     model.eval()
 
     testloader = get_validation_data(batch_size=64)
+    print("SERVER TEST SIZE:", len(testloader.dataset))  # ✅ AGGIUNGI QUESTA
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, total_loss = 0, 0, 0.0
 
