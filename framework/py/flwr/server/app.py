@@ -17,6 +17,8 @@
 
 import argparse
 import csv
+from base64 import b64decode
+from binascii import Error as BinasciiError
 import importlib.util
 import os
 import subprocess
@@ -30,8 +32,12 @@ from typing import Any, Callable, Optional, TypeVar
 
 import grpc
 import yaml
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import load_ssh_public_key
+from cryptography.hazmat.primitives.serialization import (
+    load_pem_public_key,
+    load_ssh_public_key,
+)
 
 from flwr.common import GRPC_MAX_MESSAGE_LENGTH, EventType, event
 from flwr.common.address import parse_address
@@ -408,16 +414,57 @@ def _try_load_public_keys_node_authentication(
         reader = csv.reader(csvfile)
         for row in reader:
             for element in row:
-                public_key = load_ssh_public_key(element.encode())
-                if isinstance(public_key, ec.EllipticCurvePublicKey):
-                    node_public_keys.add(public_key_to_bytes(public_key))
-                else:
+                try:
+                    public_key = _load_node_public_key(element)
+                except (ValueError, UnsupportedAlgorithm):
                     sys.exit(
                         "Error: Unable to parse the public keys in the CSV "
                         "file. Please ensure that the CSV file path points to a valid "
-                        "known SSH public keys files and try again."
+                        "known SSH or PEM public keys file and try again."
                     )
+                node_public_keys.add(public_key_to_bytes(public_key))
     return node_public_keys
+
+
+def _load_node_public_key(element: str) -> ec.EllipticCurvePublicKey:
+    raw_entry = element.strip()
+    if not raw_entry:
+        raise ValueError("Empty public key entry")
+
+    raw_bytes = raw_entry.encode()
+    public_key = _try_load_ec_public_key(raw_bytes)
+    if public_key is not None:
+        return public_key
+
+    try:
+        decoded = b64decode(raw_entry, validate=True)
+    except (BinasciiError, ValueError):
+        decoded = None
+
+    if decoded:
+        public_key = _try_load_ec_public_key(decoded)
+        if public_key is not None:
+            return public_key
+
+    raise ValueError("Unsupported public key entry")
+
+
+def _try_load_ec_public_key(key_bytes: bytes) -> Optional[ec.EllipticCurvePublicKey]:
+    try:
+        public_key = load_ssh_public_key(key_bytes)
+        if isinstance(public_key, ec.EllipticCurvePublicKey):
+            return public_key
+    except (ValueError, UnsupportedAlgorithm):
+        pass
+
+    try:
+        public_key = load_pem_public_key(key_bytes)
+        if isinstance(public_key, ec.EllipticCurvePublicKey):
+            return public_key
+    except (ValueError, UnsupportedAlgorithm):
+        pass
+
+    return None
 
 
 def _try_obtain_control_auth_plugins(

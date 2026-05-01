@@ -62,7 +62,12 @@ The `generate_cert.sh` script generates certificates for creating a secure TLS c
 
 ## Generate public and private keys for SuperNode authentication
 
-The `generate_auth_keys.sh` script generates three private and public key pairs. One pair for the SuperLink and two pairs for the two SuperNodes.
+The `generate_auth_keys.sh` script generates two private/public key pairs by default,
+cycling through three curve sizes for authentication:
+
+- **Small (112-bit)**: `secp112r1` (closest available 112-bit curve in OpenSSL)
+- **Medium (256-bit)**: `secp256k1`
+- **Large (512-bit)**: `sect571k1` (closest available Koblitz curve in OpenSSL)
 
 > [!NOTE]
 > Note that this script should only be used for development purposes and not for creating production key pairs.
@@ -72,7 +77,8 @@ The `generate_auth_keys.sh` script generates three private and public key pairs.
 ```
 
 You can generate more keys by specifying the number of client credentials that you wish to generate.
-The script also generates a CSV file that includes each of the generated (client) public keys.
+The script also generates a CSV file that includes each of the generated (client) public keys as
+base64-encoded PEM strings.
 
 ```bash
 ./generate_auth_keys.sh {your_number_of_clients}
@@ -109,7 +115,7 @@ In a new terminal window, start the first long-running Flower client (SuperNode)
 ```bash
 flower-supernode \
     --root-certificates certificates/ca.crt \
-    --auth-supernode-private-key keys/client_credentials_1 \
+    --auth-supernode-private-key keys/client_credentials_1.key \
     --auth-supernode-public-key keys/client_credentials_1.pub \
     --node-config 'dataset-path="datasets/cifar10_part_1"' \
     --clientappio-api-address="0.0.0.0:9094"
@@ -120,14 +126,14 @@ In yet another new terminal window, start the second long-running Flower client:
 ```bash
 flower-supernode \
     --root-certificates certificates/ca.crt \
-    --auth-supernode-private-key keys/client_credentials_2 \
+    --auth-supernode-private-key keys/client_credentials_2.key \
     --auth-supernode-public-key keys/client_credentials_2.pub \
     --node-config 'dataset-path="datasets/cifar10_part_2"' \
     --clientappio-api-address="0.0.0.0:9095"
 ```
 
 If you generated more than 2 client credentials, you can add more clients by opening new terminal windows and running the command
-above. Don't forget to specify the correct client private and public keys for each client instance you created.
+above, incrementing the dataset path and port, and matching the correct key pair for each client instance you created.
 
 > [!TIP]
 > Note the `--node-config` passed when spawning the `SuperNode` is accessible to the `ClientApp` via the context. In this example, the `client_fn()` uses it to load the dataset and then proceed with the training of the model.

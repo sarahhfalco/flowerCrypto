@@ -23,6 +23,8 @@ from typing import Optional
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import (
+    load_pem_private_key,
+    load_pem_public_key,
     load_ssh_private_key,
     load_ssh_public_key,
 )
@@ -211,24 +213,19 @@ def _try_setup_client_authentication(
         flwr_exit(ExitCode.SUPERNODE_NODE_AUTH_KEYS_REQUIRED)
 
     try:
-        ssh_private_key = load_ssh_private_key(
-            Path(args.auth_supernode_private_key).read_bytes(),
-            None,
+        ssh_private_key = _load_ec_private_key(
+            Path(args.auth_supernode_private_key).read_bytes()
         )
-        if not isinstance(ssh_private_key, ec.EllipticCurvePrivateKey):
-            raise ValueError()
-    except (ValueError, UnsupportedAlgorithm):
+    except (ValueError, UnsupportedAlgorithm, TypeError):
         flwr_exit(
             ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
             "Unable to parse the private key file.",
         )
 
     try:
-        ssh_public_key = load_ssh_public_key(
+        ssh_public_key = _load_ec_public_key(
             Path(args.auth_supernode_public_key).read_bytes()
         )
-        if not isinstance(ssh_public_key, ec.EllipticCurvePublicKey):
-            raise ValueError()
     except (ValueError, UnsupportedAlgorithm):
         flwr_exit(
             ExitCode.SUPERNODE_NODE_AUTH_KEYS_INVALID,
@@ -239,3 +236,31 @@ def _try_setup_client_authentication(
         ssh_private_key,
         ssh_public_key,
     )
+
+
+def _load_ec_private_key(key_bytes: bytes) -> ec.EllipticCurvePrivateKey:
+    try:
+        private_key = load_ssh_private_key(key_bytes, None)
+        if isinstance(private_key, ec.EllipticCurvePrivateKey):
+            return private_key
+    except (ValueError, UnsupportedAlgorithm):
+        pass
+
+    private_key = load_pem_private_key(key_bytes, password=None)
+    if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+        raise ValueError("Invalid private key type")
+    return private_key
+
+
+def _load_ec_public_key(key_bytes: bytes) -> ec.EllipticCurvePublicKey:
+    try:
+        public_key = load_ssh_public_key(key_bytes)
+        if isinstance(public_key, ec.EllipticCurvePublicKey):
+            return public_key
+    except (ValueError, UnsupportedAlgorithm):
+        pass
+
+    public_key = load_pem_public_key(key_bytes)
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        raise ValueError("Invalid public key type")
+    return public_key

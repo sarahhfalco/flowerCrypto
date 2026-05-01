@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NUM_CLIENTS=2
+NUM_CLIENTS=${NUM_CLIENTS:-2}
 
 # 1. Genera tutte le chiavi in un colpo solo
 
@@ -9,7 +9,7 @@ NUM_CLIENTS=2
 for i in $(seq 1 $NUM_CLIENTS); do
     PORT=$((9093 + i))
     DATASET="datasets/cifar10_part_$i"
-    PRIV_KEY="keys/client_credentials_${i}"
+    PRIV_KEY="keys/client_credentials_${i}.key"
     PUB_KEY="keys/client_credentials_${i}.pub"
 
     flower-supernode \
