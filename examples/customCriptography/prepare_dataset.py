@@ -1,7 +1,7 @@
 import argparse
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner
-
+from flwr_datasets.partitioner import DirichletPartitioner
 
 DATASET_DIRECTORY = "datasets"
 
@@ -11,7 +11,10 @@ def save_dataset_to_disk(num_partitions: int):
 
     Each will be saved into the DATASET_DIRECTORY.
     """
-    partitioner = IidPartitioner(num_partitions=num_partitions)
+    partitioner = DirichletPartitioner(
+        num_partitions=num_partitions,
+        alpha=0.5
+    )
     fds = FederatedDataset(
         dataset="uoft-cs/cifar10",
         partitioners={"train": partitioner},
