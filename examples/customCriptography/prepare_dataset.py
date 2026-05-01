@@ -13,7 +13,8 @@ def save_dataset_to_disk(num_partitions: int):
     """
     partitioner = DirichletPartitioner(
         num_partitions=num_partitions,
-        alpha=0.5
+        partition_by="label",   # 🔥 QUESTO È OBBLIGATORIO
+        alpha=0.5,              # opzionale (controlla quanto è non-IID)
     )
     fds = FederatedDataset(
         dataset="uoft-cs/cifar10",
