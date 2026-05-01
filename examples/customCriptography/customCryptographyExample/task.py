@@ -187,9 +187,26 @@ def load_data_from_disk(path: str, batch_size: int, resize=None):
         partition_train_test["train"], batch_size=batch_size, shuffle=True, generator=g, num_workers=0,
     )
     testloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
+
+    inspect_distribution(trainloader, "train")
     return trainloader, testloader
 
+from collections import Counter
 
+def inspect_distribution(loader, name="train"):
+    counter = Counter()
+    total = 0
+
+    for batch in loader:
+        labels = batch["label"].numpy()
+        counter.update(labels)
+        total += len(labels)
+
+    print(f"\n📊 {name} distribution:")
+    for k, v in sorted(counter.items()):
+        print(f"class {k}: {v} ({v/total:.2%})")
+
+# DEBUG DISTRIBUZIONE
 # ----------------------
 # TRAIN & TEST
 # ----------------------
