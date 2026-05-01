@@ -120,6 +120,9 @@ def arrayrecord_to_parameters(record: ArrayRecord, keep_input: bool) -> Paramete
             total_decrypt_time += decrypt_elapsed
 
         # aggiungi il tensor
+        if not isinstance(data, (bytes, bytearray)):
+             raise TypeError(f"Expected bytes, got {type(data)}")
+
         parameters.tensors.append(data)
 
         # rimuovi se keep_input = False
@@ -172,7 +175,6 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
         # --- SERIALIZZAZIONE PURA ---
         start_serial = time.perf_counter()
 
-        # Prendi il tensor SENZA usare pop(0), che è O(n)!
         tensor = parameters.tensors[idx] if keep_input else parameters.tensors[idx]
         dataR = tensor
 
@@ -195,7 +197,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
                 "crypto",
                 len(dataR) - base_bytes,
                 base_bytes,
-            )
+                )
             base_bytes = len(dataR)
 
         if INTEGRITY_ENABLED:
@@ -210,7 +212,7 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
                 "integrity",
                 len(dataR) - base_bytes,
                 base_bytes,
-            )
+                )
             base_bytes = len(dataR)
 
         if AUTH_ENABLED:
@@ -225,17 +227,14 @@ def parameters_to_arrayrecord(parameters: Parameters, keep_input: bool) -> Array
                 "auth",
                 len(dataR) - base_bytes,
                 base_bytes,
-            )
+                )
 
-        # --- COSTRUZIONE ARRAY ---
+        # ✅ FIX: COSTRUZIONE ARRAY dentro il loop
         ordered_dict[str(idx)] = Array(
-            data=dataR, dtype="", stype=tensor_type, shape=()
-        )
-
-    # Caso senza tensori
-    if num_arrays == 0:
-        ordered_dict[EMPTY_TENSOR_KEY] = Array(
-            data=b"", dtype="", stype=tensor_type, shape=()
+            data=dataR,
+            dtype="uint8",
+            stype=tensor_type,
+            shape=(len(dataR),),
         )
 
     # LOG
