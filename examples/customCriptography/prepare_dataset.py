@@ -11,11 +11,13 @@ def save_dataset_to_disk(num_partitions: int):
 
     Each will be saved into the DATASET_DIRECTORY.
     """
-    partitioner = DirichletPartitioner(
-        num_partitions=num_partitions,
-        partition_by="label",   # 🔥 QUESTO È OBBLIGATORIO
-        alpha=0.5,              # opzionale (controlla quanto è non-IID)
-    )
+    ##IID
+    partitioner = IidPartitioner(num_partitions=num_partitions)
+    # partitioner = DirichletPartitioner(
+    #     num_partitions=num_partitions,
+    #     partition_by="label",   # 🔥 QUESTO È OBBLIGATORIO
+    #     alpha=0.5,              # opzionale (controlla quanto è non-IID)
+    # )
     fds = FederatedDataset(
         dataset="uoft-cs/cifar10",
         partitioners={"train": partitioner},
